@@ -1,6 +1,7 @@
 from common import *
 import math
 
+
 global_userSimilarities = dict()
 
 def getItemIntersectionByUser(user1, user2):
