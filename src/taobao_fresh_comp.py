@@ -1,5 +1,6 @@
 from common import *
 import userCF
+import itemCF
 
 def splitHistoryData(fileName, splited_files):
     print(" reading data file ", fileName)
@@ -66,15 +67,36 @@ def checkItem(train_user_file_name, train_item_file_name):
 
     return 0
 
+def getUserItemCatalogCnt(filename):
+    user_cnt = set()
+    item_catelog_cnt = set()
+
+    filehandle = open(filename, encoding="utf-8", mode='r')
+    user_behavior = csv.reader(filehandle)
+    index = 0
+    for aline in user_behavior:
+        if (index == 0):
+            index += 1
+            continue
+
+        user_cnt.add(aline[0])
+        item_catelog_cnt.add(aline[4])
+
+    print("here are %d users and %d item catelogies in file %s" % (len(user_cnt), len(item_catelog_cnt), filename))
+
+    filehandle.close()
+
+    return 0
 
 
 
 file_idx = 0
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
+getUserItemCatalogCnt(data_file)
 
 loadData(data_file)
 userCF.UserCollaborativeFiltering()
-
+itemCF.ItemCollaborativeFiltering()
 
 
 

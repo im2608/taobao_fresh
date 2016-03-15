@@ -1,6 +1,7 @@
 import sys
 import csv
 import time
+import datetime
 
 ITEM_ID = "item_id"
 BEHAVEIOR_TYPE = "behavior_type"
@@ -28,8 +29,11 @@ global_totalBehaviorWeightHash = dict()
 
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_file_name = tianchi_fresh_comp_train_item):
-    user_behavior = csv.reader(open(train_user_file_name, encoding="utf-8", mode='r'))
-    item_info  = csv.reader(open(train_item_file_name, encoding="utf-8", mode='r'))
+    filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
+    user_behavior = csv.reader(filehandle1)
+
+    filehandle2 = open(train_item_file_name, encoding="utf-8", mode='r')
+    item_info  = csv.reader(filehandle2)
     index = 0
     for aline in user_behavior:
         if (index == 0):
@@ -38,19 +42,24 @@ def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_fi
 
         #哪些用户对哪些物品有操作
         if (aline[0] not in global_user_item_dict):
-            global_user_item_dict[aline[0]] = []
+            global_user_item_dict[aline[0]] = dict()
 
-        global_user_item_dict[aline[0]].append({ITEM_ID:aline[1],\
-                                                BEHAVEIOR_TYPE:int(aline[2]),\
-                                                USER_GEO:aline[3],\
-                                                ITEM_CATE:aline[4],\
-                                                TIME:aline[5]})
+        item_category = int(aline[4])
+        if (item_category not in global_user_item_dict[aline[0]]):
+            global_user_item_dict[aline[0]][item_category] = dict()
+            global_user_item_dict[aline[0]][item_category][ITEM_ID] = []
+            global_user_item_dict[aline[0]][item_category][BEHAVEIOR_TYPE] = []
+            global_user_item_dict[aline[0]][item_category][TIME] = []
 
-        if (aline[4] not in global_item_user_dict):
-            global_item_user_dict[aline[4]] = set()
+        global_user_item_dict[aline[0]][item_category][ITEM_ID] = aline[1]
+        global_user_item_dict[aline[0]][item_category][BEHAVEIOR_TYPE] = int(aline[2])
+        global_user_item_dict[aline[0]][item_category][TIME] = datetime.datetime.strptime(aline[5], "%Y-%m-%d %H")
 
-        #哪些物品被哪些用户操作
-        global_item_user_dict[aline[4]].add(aline[0])
+        if (item_category not in global_item_user_dict):
+            global_item_user_dict[item_category] = set()
+
+        #哪些物品分类被哪些用户操作
+        global_item_user_dict[item_category].add(aline[0])
 
         bev_type = int(aline[2])
         if (bev_type not in global_totalBehaviorCntHash):
@@ -67,6 +76,9 @@ def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_fi
 
     print("global_totalBehaviorWeightHash is ", global_totalBehaviorWeightHash)
 
+    filehandle1.close()
+    filehandle2.close()
+
     return 0
 
 
@@ -77,6 +89,21 @@ def getItemsUserOpted(user_id):
 
     return itemsUserOpted
 
+
+def getPosOfDoubleHash(key1, key2, double_hash):
+    if ( (key1 in double_hash and key2 in double_hash[key1]) or \
+         (key2 in double_hash and key1 in double_hash[key2]) ):
+         return None, None
+
+    if ( key1 in double_hash):
+        return key1, key2
+
+    if (key2 in double_hash):
+        return key2, key1
+
+    double_hash[key1] = dict()
+
+    return key1, key2
 
 ISOTIMEFORMAT="%Y-%m-%d %X"
 def getCurrentTime():
