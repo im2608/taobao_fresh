@@ -67,6 +67,37 @@ def checkItem(train_user_file_name, train_item_file_name):
 
     return 0
 
+def directBuy():
+    directly_buy_users = 0
+    total_users = 0
+    for user_id, item_categories in global_user_item_dict.items():
+        total_users += 1
+        directly_bought_cate = dict()
+        for category, operation_info in item_categories.items():
+            viewing = False
+            buy = False
+            for behavior_idx in range(len(operation_info[BEHAVEIOR_TYPE])):
+                if (operation_info[BEHAVEIOR_TYPE][behavior_idx] == 4):
+                    buy = True                    
+                else:
+                    viewing = True
+
+                if (viewing and buy):
+                    break
+
+            if ((not viewing) and buy):
+                if (operation_info[TIME][behavior_idx] not in directly_bought_cate):
+                    directly_bought_cate[operation_info[TIME][behavior_idx]] = []
+                directly_bought_cate[operation_info[TIME][behavior_idx]].append(category)
+
+        if (len(directly_bought_cate) > 0):
+            directly_buy_users += 1
+            logging.info("user %s directly bought\n%s" % (user_id, directly_bought_cate))
+
+    logging.info("total %d / %d user directly buoght without viewing!" % (directly_buy_users, total_users))
+
+    return 0
+
 def getUserItemCatalogCnt(filename):
     user_cnt = set()
     item_catelog_cnt = set()
@@ -90,13 +121,20 @@ def getUserItemCatalogCnt(filename):
 
 
 
+################################################################################################################
+################################################################################################################
+################################################################################################################
+################################################################################################################
 file_idx = 0
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
-getUserItemCatalogCnt(data_file)
+#getUserItemCatalogCnt(data_file)
 
-loadData(data_file)
+loadData()
+calItemCategoryWeight()
+#directBuy()
 userCF.UserCollaborativeFiltering()
-itemCF.ItemCollaborativeFiltering()
+userCF.recommendationUserCF(5)
+#itemCF.ItemCollaborativeFiltering()
 
 
 

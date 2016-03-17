@@ -7,7 +7,7 @@ global_itemCatalogSimilarities = dict()
 #不考虑权值, Inverse User Frequence
 #这里计算的是两个 item category 的相似度而不是两个item的相似度，因为 test 中的 item 不是都出现在train中
 def itemSimilarity_IUF():
-	print("%s itemSimilarity_IUF..." % getCurrentTime())
+	logging.info("%s itemSimilarity_IUF..." % getCurrentTime())
 
 	user_idx = 0
 	user_cnt = len(global_user_item_dict)
@@ -17,7 +17,7 @@ def itemSimilarity_IUF():
 
 		#用户操作了多少个 item categories
 		user_operations_cnt = len(user_operations)
-		print("%s itemCF: user %s [%d/%d] operated %d item categories" % \
+		logging.info("%s itemCF: user %s [%d/%d] operated %d item categories" % \
 			  (getCurrentTime(), user_id, user_idx, user_cnt, user_operations_cnt))
 
 		categories_user_opted = list(user_operations.keys())
@@ -53,7 +53,7 @@ def itemSimilarity_IUF():
 				sim /= math.sqrt( len(users_opted_item1) * len(users_opted_item2) )
 
 				global_itemCatalogSimilarities[key1][key2] = sim
-				print("%s itemCF [%s -- %s] = %.3f" % (getCurrentTime(), key1, key2, sim))
+				logging.info("%s itemCF [%s -- %s] = %.3f" % (getCurrentTime(), key1, key2, sim))
 
 			user_opt_idx1 += 1
 
