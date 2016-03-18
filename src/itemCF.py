@@ -17,7 +17,7 @@ def itemSimilarity_IUF():
 
 		#用户操作了多少个 item categories
 		user_operations_cnt = len(user_operations)
-		logging.info("%s itemCF: user %s [%d/%d] operated %d item categories" % \
+		print("%s itemCF: user %s [%d/%d] operated %d item categories" % \
 			  (getCurrentTime(), user_id, user_idx, user_cnt, user_operations_cnt))
 
 		categories_user_opted = list(user_operations.keys())
@@ -40,8 +40,8 @@ def itemSimilarity_IUF():
 					continue
 
 				#在 item1 category and item2 category 上有过操作的用户集合
-				users_opted_item1 = global_item_user_dict[item1_cate]
-				users_opted_item2 = global_item_user_dict[item2_cate]
+				users_opted_item1 = global_item_user_dict[item1_cate][USER_ID]
+				users_opted_item2 = global_item_user_dict[item2_cate][USER_ID]
 
 				#这两个集合的交集
 				users_opted_item1and2 = set(users_opted_item1).union(users_opted_item2) ^ (set(users_opted_item1) ^ set(users_opted_item2))
@@ -50,6 +50,7 @@ def itemSimilarity_IUF():
 				for user_id in users_opted_item1and2:
 					sim += 1 / math.log( 1 + len(global_user_item_dict[user_id]) )
 
+				#两个 item categories 的相似度
 				sim /= math.sqrt( len(users_opted_item1) * len(users_opted_item2) )
 
 				global_itemCatalogSimilarities[key1][key2] = sim

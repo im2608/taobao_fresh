@@ -4,6 +4,7 @@ import time
 import datetime
 import logging
 
+USER_ID = "user_id"
 ITEM_ID = "item_id"
 BEHAVEIOR_TYPE = "behavior_type"
 USER_GEO = "user_geohash"
@@ -79,10 +80,11 @@ def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_fi
         global_user_item_dict[user_id][item_category][behavior_type][TIME].append(behavior_time)
 
         if (item_category not in global_item_user_dict):
-            global_item_user_dict[item_category] = set()
+            global_item_user_dict[item_category] = {ITEM_ID:set(), USER_ID:set()}
 
-        #哪些物品分类被哪些用户操作
-        global_item_user_dict[item_category].add(aline[0])
+        #哪些物品分类被哪些用户操作, 该物品分类中包含了哪些item id
+        global_item_user_dict[item_category][USER_ID].add(user_id)
+        global_item_user_dict[item_category][ITEM_ID].add(item_id)
 
         bev_type = int(aline[2])
         if (bev_type not in global_user_behavior_cnt):
@@ -170,21 +172,12 @@ def calItemCategoryWeight():
 
             total += user_category_opt["w"]
 
-        logging.info("total for user [%s] is %.3f" % (user_id, total))
-
-        verifytotal = 0.0
-        verifyweight = 0.0
         for item_category, user_category_opt in user_opt.items():
-            w = user_category_opt["w"] 
-            verifytotal += w
-            #logging.info("user [%s] category [%.3f]" % (user_id, user_category_opt["w"]))
             user_category_opt["w"] /= total
-            verifyweight += user_category_opt["w"]
-            logging.info("user[%s] [%.3f] category weight [%s -- %.3f]" % (user_id, w, item_category, user_category_opt["w"]))
 
-        logging.info("user [%s] verifytotal %.3f / %.3f total, verifyweight %.3f" % (user_id, verifytotal, total, verifyweight))
-        if (verifyweight - 1.0 > 0.1):
-            logging.error("user [%s] sum of category wieght(%.3f) is not 1! " % (user_id, verifyweight))
+        #logging.info("user [%s] verifytotal %.3f / %.3f total, verifyweight %.3f" % (user_id, verifytotal, total, verifyweight))
+        # if (verifyweight - 1.0 > 0.1):
+        #     logging.error("user [%s] sum of category wieght(%.3f) is not 1! " % (user_id, verifyweight))
 
     logging.info("leaving calItemCategoryWeight...")
     return 0

@@ -18,14 +18,13 @@ def userSimilarity_IIF():
 	item_category_cnt = len(global_item_user_dict)
 	item_category_idx = 0
 
-
 	for (item_id, user_ids) in global_item_user_dict.items():		
 		item_category_idx += 1
 		userCnt = len(user_ids)
 		user_id_list = list(user_ids)
 		userIdx1 = 0
-		# print("%s userCF: item category %s [%d/%d] is operated by %d users." % \
-		# 	  (getCurrentTime(), item_id, item_category_idx, item_category_cnt, userCnt))
+		print("%s userCF: item category %s [%d/%d] is operated by %d users." % \
+		 	  (getCurrentTime(), item_id, item_category_idx, item_category_cnt, userCnt))
 
 		while (userIdx1 < userCnt):
 			userIdx2 = userIdx1 + 1
@@ -42,10 +41,10 @@ def userSimilarity_IIF():
 				if (key1 == None):
 					continue
 
-				itemsUser1and2_Opted = getItemIntersectionByUser(user1_id, user2_id)
+				itemCatsUser1and2_Opted = getItemIntersectionByUser(user1_id, user2_id)
 				sim = 0.0
-				for item_id in itemsUser1and2_Opted:
-					sim += 1 / math.log(1 + len(global_item_user_dict[item_id]))
+				for item_category in itemCatsUser1and2_Opted:
+					sim += 1 / math.log(1 + len(global_item_user_dict[item_category][USER_ID]))
 
 				sim /= math.sqrt( len(global_user_item_dict[user1_id]) * \
 	            	              len(global_user_item_dict[user2_id]) )
@@ -64,6 +63,8 @@ def recommendationUserCF(topK):
 	user_sim_topK = dict()
 
 	for user1_id in global_userSimilarities.keys():
+		logging.info("calculating similiarity for %s" % user1_id)
+		
 		
 		user_sim_topK[user1_id] = []
 		users_no_sim = ""
@@ -108,7 +109,7 @@ def recommendationUserCF(topK):
 		if (len(users_no_sim) > 0):
 			logging.info("%s has no similiarity with following users: %s" % (user1_id, users_no_sim))
 
-		logging.info("top%d of %s is %s" % (topK, user1_id, user_sim_topK[user1_id]))
+#		logging.info("top%d of %s is %s" % (topK, user1_id, user_sim_topK[user1_id]))
 
 		#根据相似度 topK 来计算用户对相应的item categories的权值
 		item_category_weight = calcuteItemCategoryWeight(user1_id, user_sim_topK[user1_id])
@@ -116,13 +117,10 @@ def recommendationUserCF(topK):
 		# final weight = 根据相似度 topK 得到的 item categories的权值 * 根据behavior 得到的 item category weight 
 		# 推荐 final weight 最大的 category
 		for category, weight in item_category_weight.items():
-			tmp = global_user_item_dict[user1_id][category]["w"] * weight
-			logging.info("user [%s] final category weight = topK_weight[%.3f] * [%.3f]opt_weight = %.3f" % 
-				         (user1_id, global_user_item_dict[user1_id][category]["w"], weight, tmp))
-			item_category_weight[category] = tmp
+			item_category_weight[category] = global_user_item_dict[user1_id][category]["w"] * weight
 
 		sorted_category_weight = sorted(item_category_weight.items(), key=lambda d:d[1], reverse=True)
-		logging.info("user [%s] sorted final category weight %s" % (user1_id, sorted_category_weight))
+#		logging.info("user [%s] sorted final category weight %s" % (user1_id, sorted_category_weight))
 
 		# final weight 最大的 category
 		category = sorted_category_weight[0][0]
@@ -155,7 +153,7 @@ def calcuteItemCategoryWeight(user_id, user_sim_topK):
 		    if (item_category in global_user_item_dict[user_in_topK]):
 		    	item_category_weight[item_category] += sim_in_topK
 
-		logging.info("user [%s] topK category weight [%s -- %.3f]" % (user_id, item_category, item_category_weight[item_category]))
+		#logging.info("user [%s] topK category weight [%s -- %.3f]" % (user_id, item_category, item_category_weight[item_category]))
 	return item_category_weight
 
     #按照权值从大到小排序， 返回一个list
