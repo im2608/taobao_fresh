@@ -1,6 +1,7 @@
 from common import *
 import userCF
 import itemCF
+import apriori
 
 def splitHistoryData(fileName, splited_files):
     print(" reading data file ", fileName)
@@ -127,13 +128,17 @@ def getUserItemCatalogCnt(filename):
 ################################################################################################################
 file_idx = 0
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
+
+apriori.loadData(data_file)
 #getUserItemCatalogCnt(data_file)
 
-loadData()
-calItemCategoryWeight()
+
+# loadData()
+# checkItemExisting()
+#calItemCategoryWeight()
 #directBuy()
-userCF.UserCollaborativeFiltering()
-userCF.recommendationUserCF(5)
+#userCF.UserCollaborativeFiltering()
+#userCF.recommendationUserCF(5)
 #itemCF.ItemCollaborativeFiltering()
 
 

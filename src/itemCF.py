@@ -36,7 +36,7 @@ def itemSimilarity_IUF():
 				# global_itemCatalogSimilarities[key1][key2] 的位置
 				# key1, key2 分别为 < cat1, cat2> or <cat2, cat1>
 				key1, key2 = getPosOfDoubleHash(item1_cate, item2_cate, global_itemCatalogSimilarities)
-				if (key1 == None):					
+				if (key1 == None):
 					continue
 
 				#在 item1 category and item2 category 上有过操作的用户集合
@@ -57,6 +57,22 @@ def itemSimilarity_IUF():
 				logging.info("%s itemCF [%s -- %s] = %.3f" % (getCurrentTime(), key1, key2, sim))
 
 			user_opt_idx1 += 1
+
+	return 0
+
+def recommendationItemCF():
+	logging.info("recommendationItemCF...")
+	for user_id, user_opt in global_user_item_dict.items():
+		most_fav_catgory, max_weight = getMostFavCategoryOfUser(user_id)
+		bought_items = user_opt[most_fav_catgory][BEHAVIOR_TYPE_BUY]
+		if (len(bought_items) == 0):
+			logging.info("user [%s] has bought nothing, skip!")
+			continue
+
+		for test_item in global_train_item[most_fav_catgory]:
+			test_item_id = test_item[0]
+			if (not userHasOperatedItem(most_fav_catgory, test_item_id)):
+				continue
 
 	return 0
 

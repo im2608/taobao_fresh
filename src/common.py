@@ -38,7 +38,7 @@ outputFile.write("user_id,item_id\n")
 logging.basicConfig(level=logging.DEBUG,\
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
                     datefmt='%a, %d %b %Y %H:%M:%S',\
-                    filename='myapp.log',\
+                    filename='..\\log\\log.txt',\
                     filemode='w')
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_file_name = tianchi_fresh_comp_train_item):
@@ -134,7 +134,7 @@ def calItemCategoryWeight():
         user_behavior_weight = {BEHAVIOR_TYPE_VIEW:0, BEHAVIOR_TYPE_FAV:0, BEHAVIOR_TYPE_CART:0, BEHAVIOR_TYPE_BUY:0}
 
         #得到用户在所有操作过的 catgories 上各种操作类型总的数量
-        for item_category, user_category_opt in user_opt.items():            
+        for item_category, user_category_opt in user_opt.items():
             for behavior_type, behavior_opt in user_category_opt.items():
                 if (behavior_type == "w"):
                     continue
@@ -188,6 +188,17 @@ def safeDevision(val1, val2):
 
     return val1/val2
 
+def getMostFavCategoryOfUser(user_id):
+    max_weight = 0.0
+    most_fav_category = ""
+    for item_category, user_category_opt in global_user_item_dict[user_id].items():
+        if (max_weight < user_category_opt["w"]):
+            max_weight = user_category_opt["w"]
+            most_fav_category = item_category
+
+    return most_fav_category, max_weight
+
+
 def getItemsUserOpted(user_id):
     itemsUserOpted = []
     for user_opt in global_user_item_dict[user_id]:
@@ -214,3 +225,33 @@ def getPosOfDoubleHash(key1, key2, double_hash):
 ISOTIMEFORMAT="%Y-%m-%d %X"
 def getCurrentTime():
     return time.strftime(ISOTIMEFORMAT, time.localtime())
+
+#检查test集中的某个category中的所有item， 是否都没有出现在train中
+def checkItemExisting():
+    for item_category, item_opt in global_item_user_dict.items():
+        train_item_id_set = set(item_opt[ITEM_ID])
+        test_item_id_set = set()
+
+        if (item_category not in global_train_item):
+            continue
+
+        for test_item_id in global_train_item[item_category]:
+            test_item_id_set.add(test_item_id[0])
+
+        intersection = train_item_id_set.union(test_item_id_set) ^ (train_item_id_set ^ test_item_id_set)
+        if (len(intersection) == 0):
+            logging.info("all of Item of category %s in train do not exist in test!" % item_category)
+        else:
+            logging.info("category [%s] %s exist in both!" % (item_category, intersection))
+
+    return 0    
+
+def userHasOperatedItem(user_id, item_category, item_id):
+    for behavior_type, behavior_opt in global_user_item_dict[user_id][item_category].items():
+        if (behavior_type == "w"):
+            continue
+
+        if (item_id in behavior_opt):
+            return True
+
+    return False
