@@ -18,6 +18,7 @@ def loadData(user_opt_file_name):
     filehandle1 = open(user_opt_file_name, encoding="utf-8", mode='r')
     user_behavior_csv = csv.reader(filehandle1)
     index = 0
+    users = ['116785013', '52791215', '138738586'];
 
     user_behavior_record = dict()
     logging.info("loading file %s" % user_opt_file_name)
@@ -33,9 +34,9 @@ def loadData(user_opt_file_name):
         item_category = int(aline[4])
         behavior_time = datetime.datetime.strptime(aline[5], "%Y-%m-%d %H")
 
-        if (user_id != '135929892'):
+        if (user_id not in  users):
+            index += 1
             continue
-
 
         if (user_id not in user_behavior_record):
             user_behavior_record[user_id] = dict()
@@ -57,6 +58,10 @@ def loadData(user_opt_file_name):
                 if (behavior_time <= user_behavior_seq[idx][1]):
                     user_behavior_seq.insert(idx, (behavior_type, behavior_time))
                     break
+        index += 1
+
+        if (index % 100000 == 0):
+            print("lines read", index)
 
             # if (behavior_time >= user_behavior_seq[seq_len - 1][1]):
             #     idx = seq_len - 1
@@ -69,6 +74,8 @@ def loadData(user_opt_file_name):
             #     if (behavior_time <= user_behavior_seq[idx][1]):
             #         user_behavior_seq.insert(idx, (behavior_type, behavior_time))
             #         break
+
+    print("total %d lines read" % index)
 
     #根据操作序列得到用户的购买记录，以及pattern
     for user_id, item_catgory_list in user_behavior_record.items():
@@ -86,11 +93,11 @@ def loadData(user_opt_file_name):
                 continue
             #用户购买记录，按照时间排序，相同时间的话，1，2，3在前，4在后
             #将连续的行为压缩成 {behavior：count}的形式
-            #[1,1,1,2,3,4] => [{1:3}, {2:1},{3:1},{4:1}]
+            #[1,1,1,2,3,4] => [[(1, time), 3], [(2, time), 1], [(3, time), 1], [(4, time), 1]
             sorted_seq = sortAndCompressBuyRecord2(behavior_seq)
 
             user_buy_record = []
-            logging.info("user: %s, cate: %s, seq: %s" % (user_id, item_category, sorted_seq))
+            logging.info("user: %s, cate: %s, behavior seq: %s, sorted seq: %s" % (user_id, item_category, behavior_seq, sorted_seq))
             for behavior_consecutive in sorted_seq:
                 behavior_type = behavior_consecutive[0][0]
                 if (behavior_type != BEHAVIOR_TYPE_BUY):
@@ -121,6 +128,7 @@ def loadData(user_opt_file_name):
     #logging.info("g_user_buy_transection is (%d) %s" % (len(g_user_buy_transection), g_user_buy_transection.keys()))
 
     g_min_support = round(g_buy_record_cnt * 0.3)
+    g_min_support = 1
     logging.info("total buy record count is %d, min support is %d" % (g_buy_record_cnt, g_min_support))
 
     # logging.info("g_user_behavior_patten is %s" % g_user_behavior_patten)
@@ -181,10 +189,11 @@ def sortAndCompressBuyRecord2(user_buy_record):
                 behavior_consecutive[1] += 1
                 inserted = True
                 break
-            if (user_behavior[1] < behavior_consecutive[0][1]):
+            if (user_behavior[1] < behavior_consecutive[0][1] or \
+                (user_behavior[1] == behavior_consecutive[0][1] and user_behavior[0] < behavior_consecutive[0][0])):
                 break
-
             idx += 1
+
         if (not inserted):
             sorted_compressed_hehavior.insert(idx, [user_behavior, 1])
 
@@ -271,31 +280,100 @@ def sortAndCompressBuyRecord(user_buy_record):
 def createC1():
     C1 = []
     for user_id, item_category_buy in g_user_buy_transection.items():
-        for item_category, buy_record in item_category_buy.items():
-            for behavior_consecutive in buy_record:
-                if (behavior_consecutive not in C1):
-                    C1.append([behavior_consecutive])
+        for item_category, buy_records in item_category_buy.items():
+            for each_record in buy_records:
+                for behavior_consecutive in each_record:
+                    found = False
+                    for c1_item in C1:
+                        if (behavior_consecutive in c1_item):
+                            found = True                                           
+                            break
+                    if (not found):
+                        C1.append([behavior_consecutive])
+    return C1
 
-    return map(frozenset, C1)
+#从Ck中的每一项都是一个[], [] 中包含一个或多个 behavior_consecutive， 查找这些behavior_consecutive的组合是否满足minsupoprt
+# ssCnt 的结构为：
+#  |<----                 frequence item                                                       -------->|  |<-- 支持度
+#  |  |<---    behavior_consecutive            ---->|  |<---        behavior_consecutive        ---->|  |  |
+# [[  [(3, datetime.datetime(2014, 12, 14, 7, 0)), 1]， [(4, datetime.datetime(2014, 12, 14, 7, 0)), 1]  ], 1]
+#       3:操作类型， datetime.datetime(2014, 12, 14, 7, 0)： 操作时间， 1： 操作次数
 
-#从Ck中查找满足minsupoprt的 behavior_consecutive
 def scanMinSupport(Ck):
-    ssCnt = {}
-    for user_id, item_category_buy in g_user_buy_transection.items():
-        for item_category, buy_record in item_category_buy.items():
-            for behavior_consecutive in Ck:
-                if (behavior_consecutive.issubset(buy_record)):
-                    if (can not in ssCnt):
-                        ssCnt[can] = 1
-                    else:
-                        ssCnt[can] += 1
+    ssCnt = []
+    totalCk = len(Ck)
+    index = 0
+    for behavior_consecutive in Ck:
+        for user_id, item_category_buy in g_user_buy_transection.items():
+            for item_category, buy_records in item_category_buy.items():
+                for each_record in buy_records:
+                    #if (behavior_consecutive in map(frozenset, each_record)):
+                    if (isCKItemInBuyRecord(behavior_consecutive, each_record)):
+                        AddItemSupport(behavior_consecutive, ssCnt)
+
+                        # if (behavior_consecutive not in ssCnt):
+                        #     ssCnt[behavior_consecutive] = 1
+                        # else:
+                        #     ssCnt[behavior_consecutive] += 1
+                index += 1
+                print("%s %d / %d records checked!" % (getCurrentTime(), index, g_buy_record_cnt))
 
     retList = []
-    for behavior_consecutive, support in ssCnt:
-        if (support >= g_min_support):
-            retList.append(behavior_consecutive)
+    totalSup = 0
+    for behavior_consecutive_support in ssCnt:
+        if (behavior_consecutive_support[1] >= g_min_support):
+            retList.append(behavior_consecutive_support[0])
+            totalSup += behavior_consecutive_support[1]
+
+    logging.info("ssCnt len is %d, total sup %d,  ssCnt is %s" % (len(ssCnt), totalSup, ssCnt))
 
     return retList
+
+# ck_item 中的每个元素都包含有 k 项 behavior_consecutive， 查看它们是否都在 buy_record 中
+def isCKItemInBuyRecord(ck_item, buy_record):
+    logging.info("ck_item is %s, buy_record is %s" % (ck_item, buy_record))
+    for each_item in ck_item:
+        inRecord = False
+        for behavior_consecutive in buy_record:
+            #logging.info("isCKItemInBuyRecord each_item %s, behavior_consecutive %s" % (each_item, behavior_consecutive))
+            if (each_item[0][0] == behavior_consecutive[0][0] and \
+                each_item[1] == behavior_consecutive[1]):
+                inRecord = True
+                break
+        if (not inRecord):
+            #logging.info("ck_item %s is Not in buy_record %s" % (ck_item, buy_record))
+            return False
+
+    #logging.info("ck_item %s is in buy_record %s" % (ck_item, buy_record))
+    return True
+
+def AddItemSupport(behavior_consecutive, support_dict):
+    logging.info("AddItemSupport behavior_consecutive %s" % behavior_consecutive)
+    # logging.info("AddItemSupport support_dict %s" % support_dict)
+
+    for item_support in support_dict:
+        # item_support[0] 操作序列
+        # item_support[1] 操作序列的支持度
+        frequence_item = item_support[0]
+        if (len(frequence_item) != len(behavior_consecutive)):
+            continue
+        found = False
+        for idx in range(len(frequence_item)):
+            if (frequence_item[idx][0][0] == behavior_consecutive[idx][0][0] and 
+                frequence_item[idx][0][1] == behavior_consecutive[idx][0][1]):
+                found = True
+                break
+
+        if (found):
+            logging.info("found behavior_consecutive %s in support_dict %s" % (behavior_consecutive, support_dict))
+            item_support[1] += 1
+            return
+
+    logging.info("not found behavior_consecutive %s in %s" % (behavior_consecutive, support_dict))
+    support_dict.append([behavior_consecutive.copy(), 1])
+    logging.info("after append: %s" % (support_dict))
+
+    return 0
 
 # Lk 内每个元素均为k项， 将它们合并成 k+1 项
 def aprioriGen(Lk, K):
@@ -304,24 +382,40 @@ def aprioriGen(Lk, K):
     for i in range(lenLk):
         for j in range(i + 1, lenLk):
             #截取 [0, k-2) 的元素
-            L1 = list(Lk[i])[:k-2]
-            L2 = list(Lk[j])[:k-2]
+            L1 = list(Lk[i])[:K-2]
+            L2 = list(Lk[j])[:K-2]
             if (L1 == L2):
                 retList.append(L1 | L2)
     return retList
 
 def aprioriAlgorithm():
     logging.info("entered aprioriAlgorithm")
+    print("%s running aprioriAlgorithm" % getCurrentTime())
 
     C1 = createC1()
+    #logging.info("C1 is %s " % list(C1))
+    
+    logging.info("C1 has %d items, %s" % (len(C1), C1))
+    print("%s C1 has %d items" % (getCurrentTime(), len(C1)))
+
     L1 = scanMinSupport(C1)
+    logging.info("%d C1 meet min support" % (len(L1)))
+    print("%s %d C1 meet min support" % (getCurrentTime(), len(L1)))
+
     L = [L1]
     k = 2
     while (len(L[k-2]) > 0):
-        Ck = aprioriGen(L[k-2])
+        Ck = aprioriGen(L[k-2], k)
+        logging.info("C%d has %d items " % len(Ck))
+        print("%s C%d has %d items " % (getCurrentTime(), len(Ck)))
+
         Lk = scanMinSupport(Ck)
+        logging.info("%d C%d meet min support" % (len(Lk), k))
+        print("%s %d C%d meet min support" % (getCurrentTime(), len(Lk), k))
+
         L.append(Lk)
         k += 1
 
     logging.info("aprioriAlgorithm L is %s" % L)
+    print("%s aprioriAlgorithm done" % getCurrentTime())
     return L

@@ -121,7 +121,6 @@ def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_fi
 
         global_train_item[item_category].append([aline[0], aline[1]])
 
-
     filehandle1.close()
     filehandle2.close()
 
