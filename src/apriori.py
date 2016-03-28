@@ -166,6 +166,9 @@ def saveRecordstoRedis(all_user_ids_set):
     all_users = ",".join(all_user_ids_set)
     redis_cli.set("all_users", all_users)
 
+    for user_id, item_category_buy in g_user_buy_transection.items():
+        redis_cli.hset(user_id, item_category, buy_records)
+
     print("%s saveRecordstoRedis() Done!" % getCurrentTime())
 
     return 0    
