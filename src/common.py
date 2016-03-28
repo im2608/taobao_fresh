@@ -3,6 +3,8 @@ import csv
 import time
 import datetime
 import logging
+import redis
+
 
 USER_ID = "user_id"
 ITEM_ID = "item_id"
@@ -10,6 +12,8 @@ BEHAVEIOR_TYPE = "behavior_type"
 USER_GEO = "user_geohash"
 ITEM_CATE = "item_category"
 TIME = "time"
+
+redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=1)
 
 BEHAVIOR_TYPE_VIEW = 1
 BEHAVIOR_TYPE_FAV  = 2
@@ -35,10 +39,10 @@ global_user_behavior_cnt = dict()
 outputFile = open("%s\\..\\output\\recommendation.csv" % runningPath, encoding="utf-8", mode='w')
 outputFile.write("user_id,item_id\n")
 
-logging.basicConfig(level=logging.DEBUG,\
+logging.basicConfig(level=logging.INFO,\
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
                     datefmt='%a, %d %b %Y %H:%M:%S',\
-                    filename='..\\log\\log.txt',\
+                    filename='..\\log\\log.redis.txt',\
                     filemode='w')
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_file_name = tianchi_fresh_comp_train_item):
