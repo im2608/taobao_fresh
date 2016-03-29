@@ -114,6 +114,7 @@ def loadData(save_to_redis=False, user_opt_file_name = tianchi_fresh_comp_train_
                     for idx in range(len(user_buy_record)):
                         time_dif = user_buy_record[idx][0][1] - start_time
                         time_dif = time_dif.days * 24 + time_dif.seconds / 3600
+                        #重新生成新的三元组
                         user_buy_record[idx] = (user_buy_record[idx][0][0], time_dif, user_buy_record[idx][1])
 
                     #如果有连续的购买，则为每个购买行为生成一条购物记录
@@ -172,7 +173,8 @@ def saveRecordstoRedis():
 
     return 0    
 
-# 每条购物记录在 redis 中都表现为字符串 "[[(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)], [(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)]]"
+# 每条购物记录在 redis 中都表现为字符串 
+#"[[(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)], [(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)], [(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)]]"
 def loadRecordsFromRedis():
     # 得到所有的用户
     all_users = redis_cli.get("all_users")
@@ -185,11 +187,33 @@ def loadRecordsFromRedis():
         item_categories = item_categories.split(",")
         #得到用户在某个category上的购物记录，字符串形式，分解字符串
         for category in item_categories:
-            g_user_buy_transection[user_id][category] = dict()
+            g_user_buy_transection[user_id][category] = []]
             buy_records = redis_cli.hget(user_id, category)
             if (len(buy_records) <= 4):
                 logging.info("user %s on category %s, buy records Length <= 4 %s" % (user_id, category, buy_records))
+
+            #去掉开头和末尾的 [[ ]]
+            buy_records = buy_records[2:len(buy_records) - 2]
+           
+            #得到 购买记录 list
+            #buy_records[i] = "(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)"
+            buy_records = buy_records.split("], [")
+            for idx  in range(buy_records):
+                #去掉开头和末尾的 ( )
+                buy_records[idx] = buy_records[idx][1:len(buy_records[idx] - 1)]
+
+                #得到三元组list： '1, 0.0, 35'， '2, 0.0, 1'
+                behavior_list =  buy_records[idx].split("), (")
+
+                user_buy_record = []
+                for behavior_idx in behavior_list:
+                    behavior = behavior_list[behavior_idx].split(", ")
+                    behavior_type  = int(behavior[0])
+                    behavior_time  = int(behavior[1])
+                    behavior_count = int(behavior[2])
+                    user_buy_record.append((behavior_type, behavior_time, behavior_count))
     return 0
+
 
 
 #用户购买记录，按照时间排序，相同时间的情况下，1，2，3排在前，4在后
