@@ -11,9 +11,8 @@ g_user_behavior_patten = dict()
 g_buy_record_cnt = 0
 g_min_support = 0.0
 
-all_user_ids_set = set()
 
-def loadData(user_opt_file_name = tianchi_fresh_comp_train_user):
+def loadData(save_to_redis=False, user_opt_file_name = tianchi_fresh_comp_train_user):
     global g_buy_record_cnt
     global g_min_support
 
@@ -35,7 +34,7 @@ def loadData(user_opt_file_name = tianchi_fresh_comp_train_user):
         item_id       = aline[1]
         behavior_type = int(aline[2])
         user_geohash  = aline[3]
-        item_category = int(aline[4])
+        item_category = aline[4]
         behavior_time = datetime.datetime.strptime(aline[5], "%Y-%m-%d %H")
 
         if (index % 100000 == 0):
@@ -89,7 +88,7 @@ def loadData(user_opt_file_name = tianchi_fresh_comp_train_user):
 
             #用户购买记录，按照时间排序，相同时间的话，1，2，3在前，4在后
             #将连续的行为压缩成 {behavior：count}的形式
-            #[1,1,1,2,3,4] => [[(1, time), 3], [(2, time), 1], [(3, time), 1], [(4, time), 1]
+            #[1,1,1,2,3,4] => [((1, time), 3), ((2, time), 1), ((3, time), 1), ((4, time), 1)]
             sorted_seq = sortAndCompressBuyRecord(behavior_seq)
 
             user_buy_record = []
@@ -112,10 +111,10 @@ def loadData(user_opt_file_name = tianchi_fresh_comp_train_user):
                     
                     #将绝对时间转成相对时间， 起始时间为该购物记录的第一个操作的时间, 单位为小时
                     start_time = user_buy_record[0][0][1]
-                    for each_record in user_buy_record:
-                        time_dif = each_record[0][1] - start_time
+                    for idx in range(len(user_buy_record)):
+                        time_dif = user_buy_record[idx][0][1] - start_time
                         time_dif = time_dif.days * 24 + time_dif.seconds / 3600
-                        each_record[0] = (each_record[0][0], time_dif)
+                        user_buy_record[idx] = (user_buy_record[idx][0][0], time_dif, user_buy_record[idx][1])
 
                     #如果有连续的购买，则为每个购买行为生成一条购物记录
                     buy_cnt = behavior_consecutive[1]
@@ -125,7 +124,6 @@ def loadData(user_opt_file_name = tianchi_fresh_comp_train_user):
 
                     user_buy_record.clear()
 
-                    all_user_ids_set.add(user_id)
 
             if (len(user_buy_record) > 0):
                 if (item_id not in g_user_behavior_patten[user_id]):
@@ -133,10 +131,8 @@ def loadData(user_opt_file_name = tianchi_fresh_comp_train_user):
 
                 g_user_behavior_patten[user_id][item_category].append(user_buy_record.copy())
 
-    saveRecordstoRedis(all_user_ids_set)
-
-    file_user_buy_record = open("%s\\..\\input\\buy_record_python.csv" % runningPath, encoding="utf-8", mode='w')
-    file_user_buy_record.write("user id,buy records\n")
+    if (save_to_redis):
+        saveRecordstoRedis()
 
     for user_id, item_category_buy in g_user_buy_transection.items():
         buy_cnt = 0
@@ -145,33 +141,56 @@ def loadData(user_opt_file_name = tianchi_fresh_comp_train_user):
                 logging.info("user %s item category %s : %s" % (user_id, item_category, each_record))
             buy_cnt += len(buy_records)
         logging.info("user %s -- %d buy records" % (user_id, buy_cnt))
-        file_user_buy_record.write("%s,%d\n" % (user_id, buy_cnt))
 
     #logging.info("g_user_buy_transection is (%d) %s" % (len(g_user_buy_transection), g_user_buy_transection.keys()))
 
-    g_min_support = round(g_buy_record_cnt * 0.3)
-    g_min_support = 10
+    g_min_support = round(g_buy_record_cnt * 0.01)
+    #g_min_support = 50
     logging.info("%s total buy record count is %d(%d), min support is %d" % (getCurrentTime(), g_buy_record_cnt, skiped_buy_cnt, g_min_support))
     print("%s total buy record count is %d(%d), min support is %d" % (getCurrentTime(), g_buy_record_cnt, skiped_buy_cnt, g_min_support))
 
     filehandle1.close()
-    file_user_buy_record.close()
 
     # logging.info("g_user_behavior_patten is %s" % g_user_behavior_patten)
 
     return 0
 
-def saveRecordstoRedis(all_user_ids_set):
+def saveRecordstoRedis():
     print("%s saveRecordstoRedis()" % getCurrentTime())
-    all_users = ",".join(all_user_ids_set)
-    redis_cli.set("all_users", all_users)
+    all_users = list(g_user_buy_transection.keys())
+    redis_cli.set("all_users", ",".join(all_users))
 
     for user_id, item_category_buy in g_user_buy_transection.items():
-        redis_cli.hset(user_id, item_category, buy_records)
+        item_categories_str = list(item_category_buy.keys())
+        #item_categories_str = [str(x) for x in item_categories]
+        redis_cli.hset(user_id, "item_category", ",".join(item_categories_str))
+
+        for item_category, buy_records in item_category_buy.items():
+            redis_cli.hset(user_id, item_category, buy_records)
 
     print("%s saveRecordstoRedis() Done!" % getCurrentTime())
 
     return 0    
+
+# 每条购物记录在 redis 中都表现为字符串 "[[(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)], [(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)]]"
+def loadRecordsFromRedis():
+    # 得到所有的用户
+    all_users = redis_cli.get("all_users")
+    all_users = all_users.split(",")
+    
+    #根据用户得到用户操作过的item category
+    for user_id in all_users:
+        g_user_buy_transection[user_id] = dict()
+        item_categories = redis_cli.hget(user_id, "item_category")
+        item_categories = item_categories.split(",")
+        #得到用户在某个category上的购物记录，字符串形式，分解字符串
+        for category in item_categories:
+            g_user_buy_transection[user_id][category] = dict()
+            buy_records = redis_cli.hget(user_id, category)
+            if (len(buy_records) <= 4):
+                logging.info("user %s on category %s, buy records Length <= 4 %s" % (user_id, category, buy_records))
+    return 0
+
 
 #用户购买记录，按照时间排序，相同时间的情况下，1，2，3排在前，4在后
 def sortAndCompressBuyRecord(user_buy_record):
@@ -211,13 +230,18 @@ def sortAndCompressBuyRecord(user_buy_record):
 
 #以单项形式得到所有的 behavior_consecutive
 def createC1():
-    C1 = []
+    print("%s creating C1" % getCurrentTime())
+    C1 = {}
     for user_id, item_category_buy in g_user_buy_transection.items():
         for item_category, buy_records in item_category_buy.items():
             for each_record in buy_records:
                 for behavior_consecutive in each_record:
-                    if [behavior_consecutive] not in C1:
-                        C1.append([behavior_consecutive])
+                    #logging.info("each_record %s" % each_record)
+                    if behavior_consecutive not in C1:
+                        C1[behavior_consecutive] = 1
+                    else:
+                        C1[behavior_consecutive] += 1
+
                     # found = False
 
                     # for c1_item in C1:
@@ -235,6 +259,19 @@ def createC1():
 # [[  [(3, datetime.datetime(2014, 12, 14, 7, 0)), 1]， [(4, datetime.datetime(2014, 12, 14, 7, 0)), 1]  ], 1]
 #       3:操作类型， datetime.datetime(2014, 12, 14, 7, 0)： 操作时间， 1： 操作次数
 
+def scanMinSupportForC1(C1):
+    tmp_C1 = []
+    for behavior_consecutive in C1.keys():
+        if C1[behavior_consecutive] < g_min_support:
+            #del(C1[behavior_consecutive])
+            tmp_C1.append(behavior_consecutive)
+
+    for behavior_consecutive in tmp_C1:
+        del(C1[behavior_consecutive])
+
+    return C1
+
+
 def scanMinSupport(Ck, k):
     ssCnt = []
     totalCk = len(Ck)
@@ -243,7 +280,7 @@ def scanMinSupport(Ck, k):
         for user_id, item_category_buy in g_user_buy_transection.items():
             for item_category, buy_records in item_category_buy.items():
                 for each_record in buy_records:
-                    if (isCKItemInBuyRecord2(ck_item, each_record)):
+                    if (isCKItemInBuyRecord(ck_item, each_record)):
                         AddItemSupport(ck_item, ssCnt)
         index += 1
         print("%s %d / %d C%d items checked!\r" % (getCurrentTime(), index, totalCk, k), end="")
@@ -263,7 +300,7 @@ def scanMinSupport(Ck, k):
     return retList
 
 # ck_item 中的每个元素都包含有 k 项 behavior_consecutive， 查看它们是否都在 buy_record 中
-def isCKItemInBuyRecord2(ck_item, buy_record):
+def isCKItemInBuyRecord(ck_item, buy_record):
     # if (len(ck_item) > 1):
     #     logging.info("ck_item is %s, buy_record is %s" % (ck_item, buy_record))
     for each_item in ck_item:
@@ -330,7 +367,7 @@ def AddItemSupport(behavior_consecutive, support_dict):
 # 若有两个k-1项集，每个项集按照“属性-值”（一般按值）的字母顺序进行排序。
 # 如果两个k-1项集的前k-2个项相同，而最后一个项不同，则证明它们是可连接的，即两这个k-1项集可以连接，即可连接生成 k 项集。
 # 使如有两个3项集：｛a, b, c｝{a, b, d}，这两个3项集就是可连接的，它们可以连接生成4项集｛a, b, c, d｝。
-# 又如两个3项集｛a, b, c｝｛a, d, e｝，这两个3项集显示是不能连接生成3项集的。
+# 又如两个3项集｛a, b, c｝｛a, d, e｝，这两个3项集是不能连接生成3项集的。
 def aprioriGen(Lk, K):
     logging.info(" aprioriGen L%d is %d" %  (K, len(Lk)))
     retList = []
@@ -353,12 +390,15 @@ def aprioriGen(Lk, K):
                 #logging.info("Can not mrege: Lk[%d] %s, Lk[%d] %s" %(i, Lk[i], j, Lk[j]))
                 continue
 
+            print("Lk[i] is ", Lk[i])
+
+            #前 k-2 项都相等，直接merge
             newItem = []
             for idx in range(item_len - 1):
                 newItem.append(Lk[i][idx])
 
             #合并最后一项
-            if (Lk[i][item_len - 1][0][1] <= Lk[j][item_len - 1][0][1]):
+            if (Lk[i][item_len - 1][0] <= Lk[j][item_len - 1][0]):
                 newItem.append(Lk[i][item_len - 1])
                 newItem.append(Lk[j][item_len - 1])
             else:
@@ -391,10 +431,12 @@ def aprioriAlgorithm():
     logging.debug(C1)
     print("%s C1 has %d items" % (getCurrentTime(), len(C1)))
 
-    L1 = scanMinSupport(C1, 1)
+    #L1 = scanMinSupport(C1, 1)
+    L1 = scanMinSupportForC1(C1)
     print("%s %d C1 meet min support" % (getCurrentTime(), len(L1)))
 
-    L = [L1]
+    L1_keys = [list(L1.keys())]
+    L = [[key] for key in L1_keys]
     k = 2
     while (len(L[k-2]) > 0):
         #将k-1 项合并成k 项

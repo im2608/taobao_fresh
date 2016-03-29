@@ -13,7 +13,7 @@ USER_GEO = "user_geohash"
 ITEM_CATE = "item_category"
 TIME = "time"
 
-redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=1)
+redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=0)
 
 BEHAVIOR_TYPE_VIEW = 1
 BEHAVIOR_TYPE_FAV  = 2

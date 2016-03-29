@@ -52,5 +52,5 @@ def verifyBuyRecords():
 file_idx = 37
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
 
-apriori.loadData(data_file)
+apriori.loadData(True)
 #verifyBuyRecords()
