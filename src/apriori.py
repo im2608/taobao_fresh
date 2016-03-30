@@ -11,6 +11,8 @@ g_user_behavior_patten = dict()
 g_buy_record_cnt = 0
 g_min_support = 0.0
 
+redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=0)
+
 
 def loadData(save_to_redis=False, user_opt_file_name = tianchi_fresh_comp_train_user):
     global g_buy_record_cnt
@@ -110,12 +112,13 @@ def loadData(save_to_redis=False, user_opt_file_name = tianchi_fresh_comp_train_
                     #logging.info("appending user %s buy %s, %s" % (user_id, item_category, user_buy_record))
                     
                     #将绝对时间转成相对时间， 起始时间为该购物记录的第一个操作的时间, 单位为小时
+                    #采用序号来代替时间
                     start_time = user_buy_record[0][0][1]
                     for idx in range(len(user_buy_record)):
                         time_dif = user_buy_record[idx][0][1] - start_time
                         time_dif = time_dif.days * 24 + time_dif.seconds / 3600
                         #重新生成新的三元组
-                        user_buy_record[idx] = (user_buy_record[idx][0][0], time_dif, user_buy_record[idx][1])
+                        user_buy_record[idx] = (user_buy_record[idx][0][0], idx, user_buy_record[idx][1])
 
                     #如果有连续的购买，则为每个购买行为生成一条购物记录
                     buy_cnt = behavior_consecutive[1]
@@ -171,47 +174,77 @@ def saveRecordstoRedis():
 
     print("%s saveRecordstoRedis() Done!" % getCurrentTime())
 
-    return 0    
+    return 0
 
 # 每条购物记录在 redis 中都表现为字符串 
 #"[[(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)], [(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)], [(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)]]"
 def loadRecordsFromRedis():
+    global g_buy_record_cnt
+    global g_min_support
+
     # 得到所有的用户
-    all_users = redis_cli.get("all_users")
+    all_users = redis_cli.get("all_users").decode()
     all_users = all_users.split(",")
-    
+
+    total_user = len(all_users)
+    print("%s loadRecordsFromRedis, here total %d users" % (getCurrentTime(), total_user))
+
     #根据用户得到用户操作过的item category
+    user_index = 0
+    skiped_user = 0
     for user_id in all_users:
+        if (user_id != '1774834'):
+            continue
+
         g_user_buy_transection[user_id] = dict()
-        item_categories = redis_cli.hget(user_id, "item_category")
+        item_categories = redis_cli.hget(user_id, "item_category").decode()
+        if (len(item_categories) == 0):
+            logging.info("User %s has no buy records!" % user_id)
+            user_index += 1
+            skiped_user += 1
+            continue
+
         item_categories = item_categories.split(",")
         #得到用户在某个category上的购物记录，字符串形式，分解字符串
         for category in item_categories:
-            g_user_buy_transection[user_id][category] = []]
-            buy_records = redis_cli.hget(user_id, category)
+            g_user_buy_transection[user_id][category] = []
+            buy_records = redis_cli.hget(user_id, category).decode()
             if (len(buy_records) <= 4):
                 logging.info("user %s on category %s, buy records Length <= 4 %s" % (user_id, category, buy_records))
 
             #去掉开头和末尾的 [[ ]]
-            buy_records = buy_records[2:len(buy_records) - 2]
+            buy_records = buy_records[2 : len(buy_records)-2]
            
             #得到 购买记录 list
             #buy_records[i] = "(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)"
             buy_records = buy_records.split("], [")
-            for idx  in range(buy_records):
+            for idx  in range(len(buy_records)):
                 #去掉开头和末尾的 ( )
-                buy_records[idx] = buy_records[idx][1:len(buy_records[idx] - 1)]
+                buy_records[idx] = buy_records[idx][1 : len(buy_records[idx])-1]
 
                 #得到三元组list： '1, 0.0, 35'， '2, 0.0, 1'
-                behavior_list =  buy_records[idx].split("), (")
+                behavior_tuple_list =  buy_records[idx].split("), (")
 
                 user_buy_record = []
-                for behavior_idx in behavior_list:
-                    behavior = behavior_list[behavior_idx].split(", ")
+                for behavior_tuple in behavior_tuple_list:
+                    behavior = behavior_tuple.split(", ")
                     behavior_type  = int(behavior[0])
-                    behavior_time  = int(behavior[1])
+                    behavior_time  = float(behavior[1])
                     behavior_count = int(behavior[2])
                     user_buy_record.append((behavior_type, behavior_time, behavior_count))
+                g_user_buy_transection[user_id][category].append(user_buy_record)
+                g_buy_record_cnt += 1
+
+        user_index += 1
+        print("%d / %d users read\r" % (user_index, total_user), end="")
+
+    g_min_support = round(g_buy_record_cnt * 0.01)
+    if (g_min_support < 1):
+        g_min_support = 1
+
+    logging.info("g_buy_record_cnt is %d, g_min_support is %d" % (g_buy_record_cnt, g_min_support))
+    print("%s total buy count %d, min support %d " % (getCurrentTime(), g_buy_record_cnt, g_min_support))
+    #redis_cli.close()
     return 0
 
 
@@ -356,7 +389,7 @@ def isCKItemInBuyRecord(ck_item, buy_record):
             return False
 
     if (len(ck_item) > 1):
-        logging.info("ck_item %s is in buy_record %s" % (ck_item, buy_record))
+        logging.debug("ck_item %s is in buy_record %s" % (ck_item, buy_record))
     return True
 
 def AddItemSupport(behavior_consecutive, support_dict):
@@ -393,7 +426,7 @@ def AddItemSupport(behavior_consecutive, support_dict):
 # 使如有两个3项集：｛a, b, c｝{a, b, d}，这两个3项集就是可连接的，它们可以连接生成4项集｛a, b, c, d｝。
 # 又如两个3项集｛a, b, c｝｛a, d, e｝，这两个3项集是不能连接生成3项集的。
 def aprioriGen(Lk, K):
-    logging.info(" aprioriGen L%d is %d" %  (K, len(Lk)))
+    logging.info(" aprioriGen length L%d is %d" %  (K-1, len(Lk)))
     retList = []
     lenLk = len(Lk)
     for i in range(lenLk):
@@ -411,10 +444,8 @@ def aprioriGen(Lk, K):
                     break
 
             if (not canMerge):
-                #logging.info("Can not mrege: Lk[%d] %s, Lk[%d] %s" %(i, Lk[i], j, Lk[j]))
+                logging.notset("Can not mrege: Lk[%d] %s, Lk[%d] %s" %(i, Lk[i], j, Lk[j]))
                 continue
-
-            print("Lk[i] is ", Lk[i])
 
             #前 k-2 项都相等，直接merge
             newItem = []
@@ -459,8 +490,9 @@ def aprioriAlgorithm():
     L1 = scanMinSupportForC1(C1)
     print("%s %d C1 meet min support" % (getCurrentTime(), len(L1)))
 
-    L1_keys = [list(L1.keys())]
-    L = [[key] for key in L1_keys]
+    L1_keys = list(L1.keys())
+    L = [ [[key] for key in L1_keys] ]
+    logging.debug("L from C1(%d) is %s" % (len(L), L))
     k = 2
     while (len(L[k-2]) > 0):
         #将k-1 项合并成k 项

@@ -13,7 +13,6 @@ USER_GEO = "user_geohash"
 ITEM_CATE = "item_category"
 TIME = "time"
 
-redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=0)
 
 BEHAVIOR_TYPE_VIEW = 1
 BEHAVIOR_TYPE_FAV  = 2
@@ -39,7 +38,14 @@ global_user_behavior_cnt = dict()
 outputFile = open("%s\\..\\output\\recommendation.csv" % runningPath, encoding="utf-8", mode='w')
 outputFile.write("user_id,item_id\n")
 
-logging.basicConfig(level=logging.INFO,\
+
+# CRITICAL 50
+# ERROR    40
+# WARNING  30
+# INFO     20
+# DEBUG    10
+# NOTSET   0
+logging.basicConfig(level=logging.DEBUG,\
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
                     datefmt='%a, %d %b %Y %H:%M:%S',\
                     filename='..\\log\\log.redis.txt',\

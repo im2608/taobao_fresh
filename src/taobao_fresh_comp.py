@@ -129,7 +129,8 @@ def getUserItemCatalogCnt(filename):
 file_idx = 0
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
 
-apriori.loadData(False, data_file)
+#apriori.loadData(False, data_file)
+apriori.loadRecordsFromRedis()
 L = apriori.aprioriAlgorithm()            
 #getUserItemCatalogCnt(data_file)
 
