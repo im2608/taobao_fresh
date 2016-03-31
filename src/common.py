@@ -35,8 +35,6 @@ global_train_item = dict()
 global_totalBehaviorWeightHash = dict()
 global_user_behavior_cnt = dict()
 
-outputFile = open("%s\\..\\output\\recommendation.csv" % runningPath, encoding="utf-8", mode='w')
-outputFile.write("user_id,item_id\n")
 
 
 # CRITICAL 50
@@ -45,18 +43,16 @@ outputFile.write("user_id,item_id\n")
 # INFO     20
 # DEBUG    10
 # NOTSET   0
-logging.basicConfig(level=logging.DEBUG,\
+logging.basicConfig(level=logging.INFO,\
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
                     datefmt='%a, %d %b %Y %H:%M:%S',\
                     filename='..\\log\\log.redis.txt',\
                     filemode='w')
 
-def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_file_name = tianchi_fresh_comp_train_item):
+def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
     user_behavior = csv.reader(filehandle1)
 
-    filehandle2 = open(train_item_file_name, encoding="utf-8", mode='r')
-    item_info  = csv.reader(filehandle2)
 
     index = 0
     logging.info("loadData(): loading file %s" % train_user_file_name)
@@ -119,22 +115,32 @@ def loadData(train_user_file_name = tianchi_fresh_comp_train_user, train_item_fi
 
     logging.info("loadData(): loading file %s" % train_item_file_name)
 
+    filehandle1.close()
+    
+
+    return 0
+
+def loadTrainItem():
+    print("loading ", tianchi_fresh_comp_train_item)
+    
+    filehandle2 = open(tianchi_fresh_comp_train_item, encoding="utf-8", mode='r')
+    item_info  = csv.reader(filehandle2)
+
     index = 0
     for aline in item_info:
         if (index == 0):
             index = 1
             continue
 
-        item_category = int(aline[2])
+        item_category = aline[2]
         if (item_category not in global_train_item):
             global_train_item[item_category] = []
 
         global_train_item[item_category].append([aline[0], aline[1]])
 
-    filehandle1.close()
     filehandle2.close()
-
     return 0
+
 
 def calItemCategoryWeight():
     logging.info("calItemCategoryWeight...")
