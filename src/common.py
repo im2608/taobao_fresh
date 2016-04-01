@@ -29,8 +29,8 @@ global_user_item_dict = dict()
 # 以item category 为 key
 global_item_user_dict = dict()
 
-# 以item category 为 key
-global_train_item = dict()
+
+global_train_item = set()
 
 global_totalBehaviorWeightHash = dict()
 global_user_behavior_cnt = dict()
@@ -46,13 +46,12 @@ global_user_behavior_cnt = dict()
 logging.basicConfig(level=logging.INFO,\
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
                     datefmt='%a, %d %b %Y %H:%M:%S',\
-                    filename='..\\log\\log.redis.txt',\
+                    filename='..\\log\\log.test.txt',\
                     filemode='w')
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
     user_behavior = csv.reader(filehandle1)
-
 
     index = 0
     logging.info("loadData(): loading file %s" % train_user_file_name)
@@ -60,7 +59,7 @@ def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
         if (index == 0):
             index += 1
             continue
-        
+
         user_id       = aline[0]
         item_id       = aline[1]
         behavior_type = int(aline[2])
@@ -116,13 +115,11 @@ def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     logging.info("loadData(): loading file %s" % train_item_file_name)
 
     filehandle1.close()
-    
-
     return 0
 
 def loadTrainItem():
-    print("loading ", tianchi_fresh_comp_train_item)
-    
+    print("%s loading %s" % (getCurrentTime(), tianchi_fresh_comp_train_item))
+
     filehandle2 = open(tianchi_fresh_comp_train_item, encoding="utf-8", mode='r')
     item_info  = csv.reader(filehandle2)
 
@@ -132,16 +129,16 @@ def loadTrainItem():
             index = 1
             continue
 
+        item_id       = aline[0]
+        item_geohash  = aline[1]
         item_category = aline[2]
-        if (item_category not in global_train_item):
-            global_train_item[item_category] = []
 
-        global_train_item[item_category].append([aline[0], aline[1]])
+        global_train_item.add(item_id)
 
     filehandle2.close()
     return 0
 
-
+#计算用户所有操作过的item 对于用户的权值
 def calItemCategoryWeight():
     logging.info("calItemCategoryWeight...")
     for user_id, user_opt in global_user_item_dict.items():
