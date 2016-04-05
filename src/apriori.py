@@ -79,9 +79,6 @@ def loadData(save_to_redis=False, user_opt_file_name = tianchi_fresh_comp_train_
         if (user_id not in g_user_buy_transection):
             g_user_buy_transection[user_id] = dict()
 
-        if (user_id not in g_user_behavior_patten):
-            g_user_behavior_patten[user_id] = dict()
-
         for item_id, behavior_seq in item_id_list.items(): 
             #用户在某个 item 上只有一次非购物操作，略过
             if (len(behavior_seq) == 1 and behavior_seq[0][0] != BEHAVIOR_TYPE_BUY):
@@ -129,6 +126,9 @@ def loadData(save_to_redis=False, user_opt_file_name = tianchi_fresh_comp_train_
 
 
             if (len(user_buy_record) > 0):
+                if (user_id not in g_user_behavior_patten):
+                    g_user_behavior_patten[user_id] = dict()
+
                 if (item_id not in g_user_behavior_patten[user_id]):
                     g_user_behavior_patten[user_id][item_id] = []
 
@@ -138,8 +138,7 @@ def loadData(save_to_redis=False, user_opt_file_name = tianchi_fresh_comp_train_
 
                 g_user_behavior_patten[user_id][item_id].append(user_buy_record.copy())
 
-    if (save_to_redis):
-        saveBuyRecordstoRedis()
+    saveBuyRecordstoRedis()
 
     #logginBuyRecords()
 
@@ -150,10 +149,6 @@ def loadData(save_to_redis=False, user_opt_file_name = tianchi_fresh_comp_train_
 
     filehandle1.close()
 
-
-    logging.info("g_user_behavior_patten is %s" % g_user_behavior_patten)
-    logging.info("g_user_buy_transection is %s" % g_user_buy_transection)
-    
 
     return 0
 
@@ -229,16 +224,15 @@ def loadRecordsFromRedisEx(min_suport_factor):
     user_index = 0
     skiped_user = 0
     for user_id in all_users:
-        if (user_id != '1774834'):
-            continue
+        # if (user_id != '1774834'):
+        #     continue
 
         #读取购物记录
         g_user_buy_transection[user_id] = dict()
 
         user_whole_info = redis_cli.hgetall(user_id)
-        logging.info("user_whole_info is %s" % user_whole_info)
-        
-        item_id_list = user_whole_info["item_id"].decode()
+
+        item_id_list = user_whole_info[bytes("item_id".encode())].decode()
         if (len(item_id_list) == 0):
             logging.info("User %s has no buy records!" % user_id)
             user_index += 1
@@ -246,24 +240,34 @@ def loadRecordsFromRedisEx(min_suport_factor):
             continue
 
         item_id_list = item_id_list.split(",")
-
-        item_pattern_list = user_whole_info["item_id_pattern"].decode()
-        item_pattern_list = item_pattern_list.split(",")
-
         for item_id in item_id_list:
-            item_buy_record = user_whole_info[item_id].decode()
-            g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(buy_records)
+            item_buy_record = user_whole_info[bytes(item_id.encode())].decode()
+            g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
             g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])
 
         #读取 beahvior pattern
-        g_user_behavior_patten[user_id] = dict()
+        #g_user_behavior_patten[user_id] = dict()
 
+        item_pattern_list = user_whole_info[bytes("item_id_pattern".encode())].decode()
+        if (len(item_pattern_list) == 0):
+            logging.info("user %s has no patterns!")
+            continue
+
+        item_pattern_list = item_pattern_list.split(",")        
         for item_id in item_pattern_list:
-            item_pattern = user_whole_info[item_id + "_pattern"].decode()
-            g_user_behavior_patten[user_id][item_id] = getRecordsFromRecordString(item_pattern)
+            tmp = item_id + "_pattern"
+            item_pattern = user_whole_info[bytes(tmp.encode())].decode()
+            #g_user_behavior_patten[user_id][item_id] = 
+            user_item_pattern = getRecordsFromRecordString(item_pattern)
+            # 对于pattern 来说只会有一条，所以直接用 [0]
+            for behavior_consecutive in user_item_pattern[0]:
+                if (behavior_consecutive not in g_user_behavior_patten):
+                    g_user_behavior_patten[behavior_consecutive] = set()
+
+                g_user_behavior_patten[behavior_consecutive].add((user_id, item_id))
 
         user_index += 1
-        print("%d / %d (%d) users read\r" % (user_index, total_user, skiped_user), end="")
+        print("%d / %d users read, %d users has no buy records\r" % (user_index, total_user, skiped_user), end="")
 
     g_min_support = round(g_buy_record_cnt * min_suport_factor)
     if (g_min_support < 1):
@@ -272,7 +276,7 @@ def loadRecordsFromRedisEx(min_suport_factor):
     logging.info("g_buy_record_cnt is %d, g_min_support is %d" % (g_buy_record_cnt, g_min_support))
     print("%s total buy count %d, min support %d " % (getCurrentTime(), g_buy_record_cnt, g_min_support))
 
-    logginBuyRecords()
+    #logginBuyRecords()
     return 0
 
 
@@ -604,52 +608,23 @@ def loadFrequentItemsFromRedis():
     return frequent_item
 
 def matchPatternAndFrequentItem(frequent_item):
-    print("%s matchPatternAndFrequentItem" % getCurrentTime())
+    print("%s matchPatternAndFrequentItemEx" % getCurrentTime())
+    lines = 0
 
     outputFile = open("%s\\..\\output\\recommendation.csv" % runningPath, encoding="utf-8", mode='w')
     outputFile.write("user_id,item_id\n")
+    for i in range(0, len(frequent_item)):
+        for each_fre_item in frequent_item[i]:
+            #查找每个频繁项出现在哪些 user patterns 中
+            # user_item_patterns 为 set({(user1, item_id 1}, (user2, item_id 2)}), 表示频繁项符合 user 在
+            # item 上的 pattern
+            user_item_patterns = getRecordsContainItems(each_fre_item, g_user_behavior_patten)
+            for user_item in user_item_patterns:
+                if (user_item[1] not in global_train_item):
+                    continue
 
-    matched_frequent_item = dict()
-    matched_users = 0
-    total_user = len(g_user_behavior_patten)
-    for user_id, item_id_opt in g_user_behavior_patten.items():
-        matched_frequent_item[user_id] = dict()
-        for item_id, behavior_pattern in item_id_opt.items():
-            for each_pattern in behavior_pattern:
-                #跳过只有一项的频繁项
-                for i in range(1, len(frequent_item)):
-                    for each_fre_item in frequent_item[i]:
-                        if (set(each_fre_item).issubset(set(each_pattern))):
-                            if (item_id not in matched_frequent_item[user_id]):
-                                matched_frequent_item[user_id][item_id] = []
-                            matched_frequent_item[user_id][item_id].append(each_fre_item)
-        matched_users += 1
-        print("%d / %d user mached\r" % (matched_users, total_user), end="")
-
-    print("%s logging patterns match frequent items" % getCurrentTime())
-    idx = 0
-    for user_id, item_id_opt in matched_frequent_item.items():
-        for item_id in item_id_opt.keys():
-            logging.info("%s %s pattern match frequence item  %s" % \
-                         (user_id, item_id, matched_frequent_item[user_id][item_id]))
-        idx += 1
-        print("%d / %d users logged\r" % (idx, matched_users), end="")
-
-    idx = 0
-    lines = 0
-    ouput_users = 0
-    print("%s outputting..." % getCurrentTime())
-    for user_id, item_id_opt in matched_frequent_item.items():
-        for item_id in item_id_opt.keys():
-            if (item_id not in global_train_item):
-                continue
-
-            for item_id in global_train_item[item_category]:
-                outputFile.write("%s,%s\n" % (user_id, item_id[0]))
+                outputFile.write("%s,%s\n" % (user_item[0], user_item[1]))
                 lines += 1
-        idx += 1
-        print("%d / %d users %d lines output, \r" % (idx, matched_users, lines), end="")
-
-
+                print("%d lines output\r" % lines, end="")
     outputFile.close()
     return 0

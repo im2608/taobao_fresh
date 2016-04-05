@@ -129,13 +129,13 @@ def getUserItemCatalogCnt(filename):
 file_idx = 0
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
 
-#apriori.loadData(False, data_file)
-#loadTrainItem()
-apriori.loadRecordsFromRedisEx(0.01)
+#apriori.loadDataAndSaveToRedis(False, data_file)
+loadTrainItem()
+apriori.loadRecordsFromRedis(0.3)
 #apriori.loadFrequentItemsFromRedis()
-# L = apriori.aprioriAlgorithm()
-# apriori.saveFrequentItemToRedis(L)
-# apriori.matchPatternAndFrequentItem(L)
+L = apriori.aprioriAlgorithm()
+#apriori.saveFrequentItemToRedis(L)
+apriori.matchPatternAndFrequentItemEx(L)
 
 #getUserItemCatalogCnt(data_file)
 
