@@ -35,7 +35,7 @@ global_train_item = set()
 global_totalBehaviorWeightHash = dict()
 global_user_behavior_cnt = dict()
 
-
+redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=0)
 
 # CRITICAL 50
 # ERROR    40

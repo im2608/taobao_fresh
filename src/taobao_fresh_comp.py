@@ -129,13 +129,22 @@ def getUserItemCatalogCnt(filename):
 file_idx = 0
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
 
-#apriori.loadDataAndSaveToRedis(False, data_file)
-loadTrainItem()
-apriori.loadRecordsFromRedis(0.3)
+need_verify = True
+factor = 0.1
+#apriori.loadDataAndSaveToRedis(need_verify)
+print("factor is %.4f, need verify %d" % (factor, need_verify))
+#loadTrainItem()
+apriori.loadRecordsFromRedis(factor, need_verify)
+apriori.Bayes(need_verify)
+
 #apriori.loadFrequentItemsFromRedis()
-L = apriori.aprioriAlgorithm()
+#L = apriori.aprioriAlgorithm()
+#apriori.matchPatternAndFrequentItem(L, factor, need_verify)
+if (need_verify):
+    apriori.verificationForecast()
+
 #apriori.saveFrequentItemToRedis(L)
-apriori.matchPatternAndFrequentItemEx(L)
+
 
 #getUserItemCatalogCnt(data_file)
 
