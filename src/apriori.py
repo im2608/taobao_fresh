@@ -119,14 +119,11 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
                         skiped_buy_cnt += 1
                         continue
 
-                    #将绝对时间转成相对时间， 起始时间为该购物记录的第一个操作的时间, 单位为小时
-                    #采用序号来代替时间
-                    start_time = user_buy_record[0][0][1]
                     for idx in range(len(user_buy_record)):
-                        time_dif = user_buy_record[idx][0][1] - start_time
-                        time_dif = time_dif.days * 24 + time_dif.seconds / 3600
-                        #重新生成新的三元组 (操作类型， 操作序号， 操作次数)
-                        user_buy_record[idx] = (user_buy_record[idx][0][0], idx, user_buy_record[idx][1])
+                        #重新生成新的三元组 (操作类型， 操作时间 2014-01-23， 操作次数)
+                        user_buy_record[idx] = (user_buy_record[idx][0][0], \
+                                                convertDatatimeToStr(user_buy_record[idx][0][1]),\
+                                                user_buy_record[idx][1])
 
                     #如果有连续的购买，则为每个购买行为生成一条购物记录
                     buy_cnt = behavior_consecutive[1]
@@ -165,7 +162,9 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
 
                 for idx in range(len(user_buy_record)):                
                     #重新生成新的三元组
-                    user_buy_record[idx] = (user_buy_record[idx][0][0], idx, user_buy_record[idx][1])
+                    user_buy_record[idx] = (user_buy_record[idx][0][0], \
+                                            convertDatatimeToStr(user_buy_record[idx][0][1]),\
+                                            user_buy_record[idx][1])
 
                 g_user_behavior_patten[user_id][item_id].append(user_buy_record.copy())
                 g_pattern_cnt += 1
@@ -186,7 +185,7 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
 
 
 def convertDatatimeToStr(opt_datatime):
-    return 0
+    return "%04d-%02d-%02d %02d" % (opt_datatime.year, opt_datatime.month, opt_datatime.day, opt_datatime.hour)
 
 def logginBuyRecords():
     print("%s logginBuyRecords" % (getCurrentTime()))
@@ -281,7 +280,7 @@ def saveBuyRecordstoRedis():
     return 0
 
 # 每条购物记录在 redis 中都表现为字符串 
-#"[[(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)], [(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)], [(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)]]"
+#"[ [(1, 2014-01-01 23, 35), (2, 2014-01-02 22, 1)], [(1, 2014-01-02 23, 35), (2, 2014-01-03 14, 1)] ]"
 def loadRecordsFromRedis(min_suport_factor, need_verify):
     global g_buy_record_cnt
     global g_min_support
@@ -420,7 +419,8 @@ def getRecordsFromRecordString(buy_records):
         for behavior_tuple in behavior_tuple_list:
             behavior = behavior_tuple.split(", ")
             behavior_type  = int(behavior[0])
-            behavior_time  = float(behavior[1])
+            #behavior_time  = float(behavior[1])
+            behavior_time  =  datetime.datetime.strptime(behavior[1], "%Y-%m-%d %H")
             behavior_count = int(behavior[2])
 
             #将连续的但是时间不同的 view 合并成一个
