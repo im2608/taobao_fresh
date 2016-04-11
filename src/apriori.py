@@ -22,7 +22,7 @@ g_min_support = 0.0
 g_buy_record_cnt_verify = 0.0
 
 g_pattern_cnt = 0.0
-redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=0)
+
 
 g_frequent_item = []
 
@@ -182,6 +182,10 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
 
     filehandle1.close()
 
+    return 0
+
+
+def convertDatatimeToStr(opt_datatime):
     return 0
 
 def logginBuyRecords():
