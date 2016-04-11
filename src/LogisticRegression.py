@@ -103,9 +103,11 @@ def get_feature_item_popularity(user_buy_records, user_behavior_patterns, user_i
 
 # nag_per_pos 正负样本比例，一个正样本对应 nag_per_pos 个负样本
 def taking_samples(user_buy_records, user_behavior_patterns, nag_per_pos):
-    return 0
+    samples = []
+    return samples
 
 def logisticRegression(user_buy_records, user_behavior_patterns):
+    samples = taking_samples(user_buy_records, user_behavior_patterns, 5)
     feature_cnt = 5
-    Xmat = np.mat(np.zeros((, feature_cnt)))
+    Xmat = np.mat(np.zeros((len(samples), feature_cnt)))
     return 0
