@@ -267,3 +267,48 @@ def userHasOperatedItem(user_id, item_category, item_id):
             return True
 
     return False
+
+def getRecordsFromRecordString(buy_records):
+    all_records = []
+
+    #去掉开头和末尾的 [[ ]]
+    buy_records = buy_records[2 : len(buy_records)-2]
+
+    #得到 购买记录 list
+    #buy_records[i] = "(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)"
+    buy_records = buy_records.split("], [")
+    for idx  in range(len(buy_records)):
+        #去掉开头和末尾的 ( )
+        buy_records[idx] = buy_records[idx][1 : len(buy_records[idx])-1]
+
+        #得到三元组list： '1, 0.0, 35'， '2, 0.0, 1'
+        behavior_tuple_list =  buy_records[idx].split("), (")
+
+        each_record = []
+        current_view = None
+        for behavior_tuple in behavior_tuple_list:
+            behavior = behavior_tuple.split(", ")
+            behavior_type  = int(behavior[0])
+            #behavior_time  = float(behavior[1])
+            behavior_time  =  datetime.datetime.strptime(behavior[1][1:-1], "%Y-%m-%d %H")
+            behavior_count = int(behavior[2])
+
+            #将连续的但是时间不同的 view 合并成一个
+            #[ (1, time1, cnt1), (1, time2, cnt2), (2, time2, 1) ] 合并成 [ (1, time1, cnt1 + cnt2), (2, time2, 1) ]
+            #[ (1, time1, cnt1), (2, time1, 1), (1, time2, cnt2) ] view 不连续则不合并
+            if (current_view == None and behavior_type == BEHAVIOR_TYPE_VIEW):
+                current_view = [behavior_time, behavior_count]
+            elif (behavior_type == BEHAVIOR_TYPE_VIEW):
+                current_view[1] += behavior_count
+            else:
+                if (current_view != None):
+                    each_record.append((BEHAVIOR_TYPE_VIEW, current_view[0], current_view[1]))
+                    each_record.append((behavior_type, behavior_time, behavior_count))
+                    current_view = None
+                else:
+                    each_record.append((behavior_type, behavior_time, behavior_count))
+        if (current_view != None):
+            each_record.append((BEHAVIOR_TYPE_VIEW, current_view[0], current_view[1]))
+
+        all_records.append(each_record)
+    return all_records

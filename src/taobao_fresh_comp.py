@@ -2,6 +2,7 @@ from common import *
 import userCF
 import itemCF
 import apriori
+import LogisticRegression as LR
 
 def splitHistoryData(fileName, splited_files):
     print(" reading data file ", fileName)
@@ -129,21 +130,28 @@ def getUserItemCatalogCnt(filename):
 file_idx = 0
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
 
-need_verify = True
+need_verify = False
 factor = 0.1
-#apriori.loadDataAndSaveToRedis(need_verify)
+#apriori.loadDataAndSaveToRedis(need_verify, data_file)
 print("factor is %.4f, need verify %d" % (factor, need_verify))
-#loadTrainItem()
-apriori.loadRecordsFromRedis(factor, need_verify)
-apriori.Bayes(need_verify)
 
-#apriori.loadFrequentItemsFromRedis()
-#L = apriori.aprioriAlgorithm()
-#apriori.matchPatternAndFrequentItem(L, factor, need_verify)
-if (need_verify):
-    apriori.verificationForecast()
+loadTrainItem()
 
-#apriori.saveFrequentItemToRedis(L)
+alog = "LR"
+
+if (alog == "Apriori"):
+    apriori.loadRecordsFromRedis(factor, need_verify)
+    # apriori.Bayes(need_verify)
+
+    #apriori.loadFrequentItemsFromRedis()
+    #L = apriori.aprioriAlgorithm()
+    #apriori.matchPatternAndFrequentItem(L, factor, need_verify)
+    if (need_verify):
+        apriori.verificationForecast()
+    #apriori.saveFrequentItemToRedis(L)
+elif (alog == "LR"):
+    LR.loadRecordsFromRedis(need_verify)
+    LR.logisticRegression()
 
 
 #getUserItemCatalogCnt(data_file)

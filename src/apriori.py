@@ -85,13 +85,14 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
                     break
         index += 1        
 
-    print("")
-    print("total %d lines read" % index)
+    print("\r\ntotal %d lines read" % index)
 
     verify_date = datetime.date(2014, 12, 18)
 
     #根据操作序列得到用户的购买记录，以及pattern
     print("%s getting user buy records" % getCurrentTime())
+    index = 0
+    total_user = len(user_behavior_record)
     for user_id, item_id_list in user_behavior_record.items(): #用户， 该用户在哪些 item 上有操作
 
         for item_id, behavior_seq in item_id_list.items(): 
@@ -105,53 +106,54 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
             sorted_seq = sortAndCompressBuyRecord(behavior_seq)
 
             user_buy_record = []
-            logging.debug("user: %s, item_id: %s, behavior seq: %s, sorted seq: %s" % (user_id, item_id, behavior_seq, sorted_seq))
+            #logging.debug("user: %s, item_id: %s, behavior seq: %s, sorted seq: %s" % (user_id, item_id, behavior_seq, sorted_seq))
             for behavior_consecutive in sorted_seq:
                 behavior_type = behavior_consecutive[0][0]
                 behavior_time = behavior_consecutive[0][1]
+                user_buy_record.append(behavior_consecutive)
 
                 if (behavior_type != BEHAVIOR_TYPE_BUY):
-                    user_buy_record.append(behavior_consecutive)
-                else:
-                    #有些购物记录没有任何浏览记录，跳过
-                    if (len(user_buy_record) == 0):
+                    continue
+
+                #有些购物记录没有任何浏览记录，跳过
+                if (len(user_buy_record) == 0):
+                    g_buy_record_cnt += 1
+                    skiped_buy_cnt += 1
+                    continue
+
+                for idx in range(len(user_buy_record)):
+                    #重新生成新的三元组 (操作类型， 操作时间 2014-01-23， 操作次数)
+                    user_buy_record[idx] = (user_buy_record[idx][0][0], \
+                                            convertDatatimeToStr(user_buy_record[idx][0][1]),\
+                                            user_buy_record[idx][1])
+
+                #如果有连续的购买，则为每个购买行为生成一条购物记录
+                buy_cnt = behavior_consecutive[1]
+
+                if (need_verify and behavior_time.date() == verify_date):
+                    if (user_id not in g_user_buy_transection_verify):
+                        g_user_buy_transection_verify[user_id] = dict()
+
+                    if (item_id not in g_user_buy_transection_verify[user_id]):
+                        g_user_buy_transection_verify[user_id][item_id] = []
+
+                    #用于验证的用户购买行为
+                    for each_buy in range(buy_cnt):
+                        g_user_buy_transection_verify[user_id][item_id].append(user_buy_record.copy())
                         g_buy_record_cnt += 1
-                        skiped_buy_cnt += 1
-                        continue
+                else:
+                    #用户的购买记录
+                    if (user_id not in g_user_buy_transection):
+                        g_user_buy_transection[user_id] = dict()
+                
+                    if (item_id not in g_user_buy_transection[user_id]):
+                        g_user_buy_transection[user_id][item_id] = []
 
-                    for idx in range(len(user_buy_record)):
-                        #重新生成新的三元组 (操作类型， 操作时间 2014-01-23， 操作次数)
-                        user_buy_record[idx] = (user_buy_record[idx][0][0], \
-                                                convertDatatimeToStr(user_buy_record[idx][0][1]),\
-                                                user_buy_record[idx][1])
+                    for each_buy in range(buy_cnt):
+                        g_user_buy_transection[user_id][item_id].append(user_buy_record.copy())
+                        g_buy_record_cnt += 1
 
-                    #如果有连续的购买，则为每个购买行为生成一条购物记录
-                    buy_cnt = behavior_consecutive[1]
-
-                    if (need_verify and behavior_time.date() == verify_date):
-                        if (user_id not in g_user_buy_transection_verify):
-                            g_user_buy_transection_verify[user_id] = dict()
-
-                        if (item_id not in g_user_buy_transection_verify[user_id]):
-                            g_user_buy_transection_verify[user_id][item_id] = []
-
-                        #用于验证的用户购买行为
-                        for each_buy in range(buy_cnt):
-                            g_user_buy_transection_verify[user_id][item_id].append(user_buy_record.copy())
-                            g_buy_record_cnt += 1
-                    else:
-                        #用户的购买记录
-                        if (user_id not in g_user_buy_transection):
-                            g_user_buy_transection[user_id] = dict()
-                    
-                        if (item_id not in g_user_buy_transection[user_id]):
-                            g_user_buy_transection[user_id][item_id] = []
-
-                        for each_buy in range(buy_cnt):
-                            g_user_buy_transection[user_id][item_id].append(user_buy_record.copy())
-                            g_buy_record_cnt += 1
-
-                    user_buy_record.clear()
+                user_buy_record.clear()
 
             if (len(user_buy_record) > 0):
                 if (user_id not in g_user_behavior_patten):
@@ -168,6 +170,8 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
 
                 g_user_behavior_patten[user_id][item_id].append(user_buy_record.copy())
                 g_pattern_cnt += 1
+        index += 1
+        print("%d /%d users checked\r" % (index, total_user), end="")
 
     saveBuyRecordstoRedis()
 
@@ -298,8 +302,8 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
     user_index = 0
     skiped_user = 0
     for user_id in all_users:
-        # if (user_id != '1774834'):
-        #     continue
+        if (user_id != '100673077'):
+            continue
 
         #读取购物记录
         g_user_buy_transection[user_id] = dict()
@@ -312,7 +316,7 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
             for item_id in item_id_list:
                 item_buy_record = user_whole_info[bytes(item_id.encode())].decode()
                 g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
-                #logging.debug("%s %s buy record %s " % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
+                logging.info("%s %s buy record %s " % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
                 g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])
         else:
             user_index += 1
@@ -342,7 +346,7 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
 
                 g_user_behavior_patten[behavior_consecutive].add((user_id, item_id))
             
-            #logging.debug("%s pattern is %s" % (behavior_consecutive, g_user_behavior_patten[behavior_consecutive]))
+            logging.info("%s pattern is %s" % (behavior_consecutive, g_user_behavior_patten[behavior_consecutive]))
 
         user_index += 1
         print("%d / %d users read\r" % (user_index, total_user), end="")
@@ -369,8 +373,8 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
 
     #读取用于验证的购物记录
     for user_id in all_users_verify:
-        # if (user_id != '1774834'):
-        #     continue
+        if (user_id != '100673077'):
+            continue
 
         #读取用于验证的购物记录
         g_user_buy_transection_verify[user_id] = set()
@@ -397,51 +401,6 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
 
     #logginBuyRecords()
     return 0
-
-def getRecordsFromRecordString(buy_records):
-    all_records = []
-
-    #去掉开头和末尾的 [[ ]]
-    buy_records = buy_records[2 : len(buy_records)-2]
-
-    #得到 购买记录 list
-    #buy_records[i] = "(1, 0.0, 35), (2, 0.0, 1), (3, 0.0, 1)"
-    buy_records = buy_records.split("], [")
-    for idx  in range(len(buy_records)):
-        #去掉开头和末尾的 ( )
-        buy_records[idx] = buy_records[idx][1 : len(buy_records[idx])-1]
-
-        #得到三元组list： '1, 0.0, 35'， '2, 0.0, 1'
-        behavior_tuple_list =  buy_records[idx].split("), (")
-
-        each_record = []
-        current_view = None
-        for behavior_tuple in behavior_tuple_list:
-            behavior = behavior_tuple.split(", ")
-            behavior_type  = int(behavior[0])
-            #behavior_time  = float(behavior[1])
-            behavior_time  =  datetime.datetime.strptime(behavior[1], "%Y-%m-%d %H")
-            behavior_count = int(behavior[2])
-
-            #将连续的但是时间不同的 view 合并成一个
-            #[ (1, time1, cnt1), (1, time2, cnt2), (2, time2, 1) ] 合并成 [ (1, time1, cnt1 + cnt2), (2, time2, 1) ]
-            #[ (1, time1, cnt1), (2, time1, 1), (1, time2, cnt2) ] view 不连续则不合并
-            if (current_view == None and behavior_type == BEHAVIOR_TYPE_VIEW):
-                current_view = [behavior_time, behavior_count]
-            elif (behavior_type == BEHAVIOR_TYPE_VIEW):
-                current_view[1] += behavior_count
-            else:
-                if (current_view != None):
-                    each_record.append((BEHAVIOR_TYPE_VIEW, current_view[0], current_view[1]))
-                    each_record.append((behavior_type, behavior_time, behavior_count))
-                    current_view = None
-                else:
-                    each_record.append((behavior_type, behavior_time, behavior_count))
-        if (current_view != None):
-            each_record.append((BEHAVIOR_TYPE_VIEW, current_view[0], current_view[1]))
-
-        all_records.append(each_record)
-    return all_records
 
 #用户购买记录，按照时间排序，相同时间的情况下，1，2，3排在前，4在后
 def sortAndCompressBuyRecord(user_buy_record):
