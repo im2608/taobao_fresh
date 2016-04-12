@@ -127,7 +127,7 @@ def get_feature_buy_at_date(behavior_type, checking_date, user_item_pairs):
     return does_operated
 
 # 得到用户的 购买过商品数量/浏览过的数量
-def get_feature_buy_view_ratio(user_buy_records, user_behavior_patterns, user_item_pairs):
+def get_feature_buy_view_ratio(user_item_pairs):
     buy_view_ratio = dict()
     buy_view_ratio_list = []
 
@@ -144,15 +144,15 @@ def get_feature_buy_view_ratio(user_buy_records, user_behavior_patterns, user_it
             continue
 
         buy_count = 0
-        for item_id, item_buy_records in user_buy_records[user_id].items():
+        for item_id, item_buy_records in g_user_buy_transection[user_id].items():
             buy_count += len(item_buy_records)
 
         # 没有pattern， 所有的view 都转化成了buy
-        if (user_id not in user_behavior_patterns):
+        if (user_id not in g_user_behavior_patten):
             buy_view_ratio_list[index][1] = 1
 
         view_count = 0
-        for item_id, item_patterns in user_behavior_patterns[user_id].items():
+        for item_id, item_patterns in g_user_behavior_patten[user_id].items():
             view_count += len(item_patterns)
 
         buy_view_ratio[user_id] = buy_count / (buy_count + view_count)
@@ -186,7 +186,7 @@ def get_feature_item_popularity(user_item_pairs):
 # positive_samples_cnt_per_user 每个用户取得正样本的数量
 # nag_per_pos 正负样本比例，一个正样本对应 nag_per_pos 个负样本
 # 正样本为用户购买过的商品，负样本为用户操作过但是没有购买的商品
-def taking_samples(positive_samples_cnt_per_user, nag_per_pos):
+def taking_samples(positive_samples_cnt_per_user, nag_per_pos, item_popularity):
     samples = []
     Ymat = []
     index = 0
@@ -235,18 +235,27 @@ def getSamplesListByUser(user_behavior_dict, user_id, sample_cnt):
 def logisticRegression():
     positive_samples_cnt_per_user = 2
     nag_per_pos = 5
-    samples, Ymat = taking_samples(positive_samples_cnt_per_user, nag_per_pos)
+
+    #item 的热度
+    item_popularity = get_feature_item_popularity(samples)
+    Xmat[:, 0] = item_popularity
+
+    samples, Ymat = taking_samples(positive_samples_cnt_per_user, nag_per_pos, item_popularity)
     logging.info("samples %s" % samples)
     logging.info("Ymat %s" % Ymat)
 
     feature_cnt = 5
     Xmat = np.mat(np.zeros((len(samples), feature_cnt)))
 
-    #item 的热度
-    Xmat[:, 0] = get_feature_item_popularity(samples)
 
     checking_date = datetime.datetime.strptime("2014-12-17", "%Y-%m-%d").date()
-    Xmat[:, 0] = get_feature_buy_at_date(BEHAVIOR_TYPE_FAV, checking_date, samples)
-    Xmat[:, 1] = get_feature_buy_at_date(BEHAVIOR_TYPE_CART, checking_date, samples)
+    #用户在 checking date 是否有过 favorite
+    Xmat[:, 1] = get_feature_buy_at_date(BEHAVIOR_TYPE_FAV, checking_date, samples)
+    #用户在 checking date 是否有过 cart
+    Xmat[:, 2] = get_feature_buy_at_date(BEHAVIOR_TYPE_CART, checking_date, samples)
+
+    # 用户 购买过商品数量/浏览过的数量
+    Xmat[:, 3] = get_feature_buy_view_ratio(samples):
+
     print(Xmat)
     return 0
