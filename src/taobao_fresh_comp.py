@@ -135,11 +135,11 @@ factor = 0.1
 #apriori.loadDataAndSaveToRedis(need_verify, data_file)
 print("factor is %.4f, need verify %d" % (factor, need_verify))
 
-loadTrainItem()
 
 alog = "LR"
 
 if (alog == "Apriori"):
+    loadTrainItem()
     apriori.loadRecordsFromRedis(factor, need_verify)
     # apriori.Bayes(need_verify)
 
@@ -150,6 +150,7 @@ if (alog == "Apriori"):
         apriori.verificationForecast()
     #apriori.saveFrequentItemToRedis(L)
 elif (alog == "LR"):
+    loadTrainItemInCatalogLevel()
     LR.loadRecordsFromRedis(need_verify)
     LR.logisticRegression()
 

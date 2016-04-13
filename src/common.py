@@ -30,7 +30,7 @@ global_user_item_dict = dict()
 global_item_user_dict = dict()
 
 
-global_train_item = set()
+global_train_item = dict()
 
 global_totalBehaviorWeightHash = dict()
 global_user_behavior_cnt = dict()
@@ -137,6 +137,42 @@ def loadTrainItem():
 
     filehandle2.close()
     return 0
+
+def loadTrainItemInCatalogLevel():
+
+    print("%s loading %s" % (getCurrentTime(), tianchi_fresh_comp_train_item))
+
+    filehandle2 = open(tianchi_fresh_comp_train_item, encoding="utf-8", mode='r')
+    item_info  = csv.reader(filehandle2)
+
+    index = 0
+    for aline in item_info:
+        if (index == 0):
+            index = 1
+            continue
+
+        item_id       = aline[0]
+        item_geohash  = aline[1]
+        item_category = aline[2]
+
+        if (item_category not in global_train_item):
+            global_train_item[item_category] = set()
+
+        global_train_item[item_category].add(item_id)
+
+    for item_category, item_id_set in global_train_item.items():
+        logging.debug("%s ==> %s" % (item_category, item_id_set))
+
+    filehandle2.close()
+    return 0
+
+def getCatalogByItemId(item_id):
+    for item_category, item_id_set in global_train_item.items():
+        if (item_id in item_id_set):
+            return item_category
+
+    logging.warn("item %s doesn't exist in test set!" % item_id)
+    return None
 
 #计算用户所有操作过的item 对于用户的权值
 def calItemCategoryWeight():
