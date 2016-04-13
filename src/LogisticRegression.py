@@ -191,7 +191,35 @@ def get_feature_item_popularity(item_popularity_dict, user_item_pairs):
 
     return item_popularity_list
 
-#最后一次购买同类型的商品至 checking_date 的天数
+#用户一共购买过多少同类型的商品 * 最后一天购买至今的天数的倒数
+def get_feature_how_many_buy(last_buy, checking_date, user_item):
+    how_many_buy = np.zeros((len(user_item_pairs), 1))
+
+    how_many_buy_dict = {}
+
+    for index in range(len(user_item_pairs)):
+        user_id = user_item_pairs[index][0]
+        item_id = user_item_pairs[index][1]
+        item_category = getCatalogByItemId(item_id)
+        if item_category == None:
+            continue
+
+        if ((user_id, item_category) in how_many_buy_dict):
+            how_many_buy[index] = how_many_buy_dict[(user_id, item_category)]
+            continue
+
+        buy_count = 0
+        for item_id_can, buy_records in g_user_buy_transection[user_id].items():
+            # 不属于同一个 category， skip
+            if (getCatalogByItemId(item_id_can) != item_category):
+                continue
+
+            buy_count += len(buy_records)
+
+    return 0
+
+# 最后一次购买同类型的商品至 checking_date 的天数，
+# 天数需要取倒数
 def get_feature_last_buy(checking_date, user_item_pairs):
     days_from_last_buy_cat_dict = dict()
     days_from_last_buy_cat_list = np.zeros((len(user_item_pairs), 1))
@@ -225,9 +253,11 @@ def get_feature_last_buy(checking_date, user_item_pairs):
                         continue
 
                     days_from_last_buy = checking_date - behavior_time.date()
+                    #天数取倒数， 时间越远该数字越小
                     if (days_from_last_buy_cat_dict[(user_id, sample_item_category)] < days_from_last_buy.days):
                         days_from_last_buy_cat_dict[(user_id, sample_item_category)] =  1/ days_from_last_buy.days
                     else:
+                        #同一天购买取 1
                         days_from_last_buy_cat_dict[(user_id, sample_item_category)] = 1
 
         days_from_last_buy_cat_list[index] = days_from_last_buy_cat_dict[(user_id, sample_item_category)]
