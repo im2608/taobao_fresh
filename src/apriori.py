@@ -37,7 +37,7 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
 
     user_behavior_csv = csv.reader(filehandle1)
     index = 0
-    users = ['100673077']
+    users = ['110883802']
 
     user_behavior_record = dict()
     skiped_buy_cnt = 0
@@ -57,9 +57,9 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
         if (index % 100000 == 0):
             print("%d lines read\r" % index,  end="")
 
-        # if (user_id not in  users):
-        #     index += 1
-        #     continue
+        if (user_id not in  users):
+            index += 1
+            continue
 
         if (user_id not in user_behavior_record):
             user_behavior_record[user_id] = dict()
@@ -173,7 +173,10 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
         index += 1
         print("%d /%d users checked\r" % (index, total_user), end="")
 
-    saveBuyRecordstoRedis()
+    #saveRecordstoRedis()
+
+    logging.info("g_user_behavior_patten %s" % g_user_behavior_patten)
+    logging.info("g_user_buy_transection %s" % g_user_buy_transection)
 
     #logginBuyRecords()
 
@@ -208,7 +211,7 @@ def logginBuyRecords():
     print("%s logginBuyRecords Done" % (getCurrentTime()))
     return 0
 
-def saveBuyRecordstoRedis():
+def saveRecordstoRedis():
     print("%s saveBuyRecordstoRedis()" % getCurrentTime())
     all_users = list(g_user_buy_transection.keys())
     redis_cli.set("all_users", ",".join(all_users))

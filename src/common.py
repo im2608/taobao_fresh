@@ -171,7 +171,7 @@ def getCatalogByItemId(item_id):
         if (item_id in item_id_set):
             return item_category
 
-    logging.warn("item %s doesn't exist in test set!" % item_id)
+    #logging.warn("item %s doesn't exist in test set!" % item_id)
     return None
 
 #计算用户所有操作过的item 对于用户的权值

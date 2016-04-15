@@ -2,7 +2,6 @@ from common import *
 import userCF
 import itemCF
 import apriori
-import LogisticRegression as LR
 
 def splitHistoryData(fileName, splited_files):
     print(" reading data file ", fileName)
@@ -127,7 +126,11 @@ def getUserItemCatalogCnt(filename):
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
-file_idx = 0
+sys.path.append("%s\\LR\\" % runningPath)
+import LR
+import LR_common 
+
+file_idx = 53
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
 
 need_verify = False
@@ -150,9 +153,10 @@ if (alog == "Apriori"):
         apriori.verificationForecast()
     #apriori.saveFrequentItemToRedis(L)
 elif (alog == "LR"):
+    user_cnt = 50
     loadTrainItemInCatalogLevel()
-    LR.loadRecordsFromRedis(need_verify)
-    LR.logisticRegression()
+    LR_common.loadRecordsFromRedis(user_cnt, need_verify)
+    LR.logisticRegression(user_cnt)
 
 
 #getUserItemCatalogCnt(data_file)

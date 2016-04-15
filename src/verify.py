@@ -52,8 +52,7 @@ def verifyBuyRecords():
 file_idx = 37
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
 
-need_verify = True
 #apriori.loadData(True)
-apriori.loadRecordsFromRedis(need_verify)
-apriori.saveRecordstoRedis(need_verify)
+apriori.loadRecordsFromRedis()
+apriori.saveRecordstoRedis()
 #verifyBuyRecords()
