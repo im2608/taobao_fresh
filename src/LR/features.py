@@ -197,7 +197,27 @@ def get_feature_how_many_buy(last_buy, checking_date, user_item_pairs):
 
 # 用户最后一次操作同类型的商品至 checking_date 的天数，
 # 天数需要取倒数
-def get_feature_last_opt(user_records, checking_date, behavior_type, user_item_pairs):
+def get_last_opt_category_date(user_records, checking_date, behavior_type, user_item_pairs):
+    last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
+    for item_id_can, item_opt_records in user_records[user_id].items():
+        # 不属于同一个 category， skip
+        if (getCatalogByItemId(item_id_can) != item_category):
+            continue
+
+        for each_record in item_opt_records:
+            for index in range(len(each_record)-1, -1, -1):
+                if (each_record[index][0] != behavior_type):
+                    continue
+
+                #each_record 已经按照时间排好序
+                if (each_record[index][1].date() > last_opt_date and \
+                    each_record[index][1].date() <= checking_date):
+                    last_opt_date = each_record[index][1].date()
+                    break 
+
+    return last_opt_date   
+
+def get_feature_last_opt_category(checking_date, behavior_type, user_item_pairs):
     days_from_last_opt_cat_dict = dict()
     days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), 1))
 
@@ -205,38 +225,75 @@ def get_feature_last_opt(user_records, checking_date, behavior_type, user_item_p
 
         user_id = user_item_pairs[index][0]
         item_id = user_item_pairs[index][1]
-        sample_item_category = getCatalogByItemId(item_id)
+        item_category = getCatalogByItemId(item_id)
 
-        if ((user_id, sample_item_category) in days_from_last_opt_cat_dict):
-            days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, sample_item_category)]
+        if ((user_id, item_category) in days_from_last_opt_cat_dict):
+            days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, item_category)]
             continue
 
-        days_from_last_opt_cat_dict[(user_id, sample_item_category)] = 0
+        days_from_last_opt_cat_dict[(user_id, item_category)] = 0
 
-        last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
-        for item_id_can, item_opt_records in user_records[user_id].items():
-            # 不属于同一个 category， skip
-            if (getCatalogByItemId(item_id_can) != sample_item_category):
-                continue
-
-            for each_record in item_opt_records:
-                for index in range(len(each_record)-1, -1, -1):
-                    if (each_record[index][0] != behavior_type):
-                        continue
-
-                    if (each_record[index][1].date() > last_opt_date and \
-                        each_record[index][1].date() <= checking_date):
-                        last_opt_date = each_record[index][1].date()
+        last_opt_date = get_last_opt_category_date(g_user_buy_transection, checking_date, behavior_type, user_item_pairs)
+        if (behavior_type != BEHAVIOR_TYPE_BUY):
+            last_opt_date2 = get_last_opt_category_date(g_user_behavior_patten, checking_date, behavior_type, user_item_pairs)
+            last_opt_date = max(last_opt_date, last_opt_date2)
 
         days_from_last_opt = checking_date - last_opt_date
         if (days_from_last_opt.days == 0):
             #同一天购买取 1
-            days_from_last_opt_cat_dict[(user_id, sample_item_category)] = 1
+            days_from_last_opt_cat_dict[(user_id, item_category)] = 1
         else:
             #天数取倒数， 时间越远该数字越小
-            days_from_last_opt_cat_dict[(user_id, sample_item_category)] =  1/ days_from_last_opt.days
+            days_from_last_opt_cat_dict[(user_id, item_category)] =  1/ days_from_last_opt.days
 
-        days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, sample_item_category)]
-        logging.info("last buy (%s, %s) %d" % (user_id, sample_item_category, days_from_last_opt_cat_dict[(user_id, sample_item_category)]))
+        days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, item_category)]
+        logging.info("last buy (%s, %s) %d" % (user_id, item_category, days_from_last_opt_cat_dict[(user_id, item_category)]))
 
     return days_from_last_opt_cat_list
+
+
+# 用户最后一次操作 item 至 checking_date 的天数，
+# 天数需要取倒数
+def get_last_opt_item_date(user_records, checking_date, behavior_type, user_item_pairs):
+    last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
+    for item_id_can, item_opt_records in user_records[user_id].items():
+
+        for each_record in item_opt_records:
+            for index in range(len(each_record)-1, -1, -1):
+                if (each_record[index][0] != behavior_type):
+                    continue
+
+                #each_record 已经按照时间排好序
+                if (each_record[index][1].date() > last_opt_date and \
+                    each_record[index][1].date() <= checking_date):
+                    last_opt_date = each_record[index][1].date()
+                    break 
+
+    return last_opt_date   
+
+def get_feature_last_opt_item(checking_date, behavior_type, user_item_pairs):
+    days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), 1))
+
+    for index in range(len(user_item_pairs)):
+
+        user_id = user_item_pairs[index][0]
+        item_id = user_item_pairs[index][1]
+
+        last_opt_date = get_last_opt_item_date(g_user_buy_transection, checking_date, behavior_type, user_item_pairs)
+        if (behavior_type != BEHAVIOR_TYPE_BUY):
+            last_opt_date2 = get_last_opt_item_date(g_user_behavior_patten, checking_date, behavior_type, user_item_pairs)
+            last_opt_date = max(last_opt_date, last_opt_date2)
+
+        days_from_last_opt = checking_date - last_opt_date
+        if (days_from_last_opt.days == 0):
+            #同一天购买取 1
+            days_from_last_opt_cat_dict[(user_id, item_category)] = 1
+        else:
+            #天数取倒数， 时间越远该数字越小
+            days_from_last_opt_cat_dict[(user_id, item_category)] =  1/ days_from_last_opt.days
+
+        days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, item_category)]
+        logging.info("last buy (%s, %s) %d" % (user_id, item_category, days_from_last_opt_cat_dict[(user_id, item_category)]))
+
+    return days_from_last_opt_cat_list    
+    return 0
