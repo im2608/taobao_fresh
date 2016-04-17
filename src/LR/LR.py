@@ -27,7 +27,7 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
     # 商品热度 购买该商品的用户/总用户数
     print("%s getting item popularity by samples..." % getCurrentTime())
     
-    Xmat[:, feature_cnt] = get_feature_item_popularity(item_popularity_dict, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_item_popularity(item_popularity_dict, samples); feature_cnt += 1
     print("%s Total %d samples taken" % (getCurrentTime(), len(samples)))
     logging.info("%s Total %d samples taken" % (getCurrentTime(), len(samples)))
 
@@ -37,46 +37,61 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
     #用户在 checking date 的前 1 天是否对 item id 有过 favorite
     verify_date = checking_date - datetime.timedelta(1)
     print("%s calculating %s FAV ..." % (getCurrentTime(), verify_date))
-    Xmat[:, feature_cnt] = get_feature_behavior_on_date(BEHAVIOR_TYPE_FAV, verify_date, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_behavior_on_date(BEHAVIOR_TYPE_FAV, verify_date, samples); feature_cnt += 1
 
     #用户在 checking date 的前 1 天是否有过 cart
     print("%s calculating %s CART ..." % (getCurrentTime(), verify_date))
-    Xmat[:, feature_cnt] = get_feature_behavior_on_date(BEHAVIOR_TYPE_CART, verify_date, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_behavior_on_date(BEHAVIOR_TYPE_CART, verify_date, samples); feature_cnt += 1
 
     # 得到用户在某商品上的购买浏览转化率 购买过的某商品数量/浏览过的商品数量
     print("%s calculating user-item b/v ratio..." % getCurrentTime())
-    Xmat[:, feature_cnt] = get_feature_buy_view_ratio(samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_buy_view_ratio(samples); feature_cnt += 1
 
-    #最后一次购买同类型的商品至 checking_date 的天数的倒数
+    #最后一次操作同类型的商品至 checking_date 的天数的倒数
     print("%s calculating last buy..." % getCurrentTime())
-    Xmat[:, feature_cnt] = get_feature_last_opt(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_BUY, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_category(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_VIEW, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_category(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_FAV, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_category(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_CART, samples); feature_cnt += 1
+     Xmat[:, feature_cnt] = feature_last_opt_category(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_BUY, samples); feature_cnt += 1
 
     #用户一共购买过多少同类型的商品 * 最后一天购买至 checking_date 的天数的倒数
-    Xmat[:, feature_cnt] = get_feature_how_many_buy(Xmat[:, 4], checking_date, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_how_many_buy(Xmat[:, 4], checking_date, samples); feature_cnt += 1
 
     # 用户在过去 30 天对 item id 各个behavior type 的次数 / 用户相应的behavior tpye 的次数    
     pre_days = 30
     print("%s get behavior ratios...%d days" % (getCurrentTime(), pre_days))
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_FAV, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_CART, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_FAV, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_CART, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
 
     # 用户在过去 7 天对 item id 各个behavior type 的次数 / 用户相应的behavior tpye 的次数    
     pre_days = 7
     print("%s get behavior ratios...%d days" % (getCurrentTime(), pre_days))
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_FAV, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_CART, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_FAV, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_CART, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
 
     # 用户在过去 3 天对 item id 各个behavior type 的次数 / 用户相应的behavior tpye 的次数    
     pre_days = 3
     print("%s get behavior ratios...%d days" % (getCurrentTime(), pre_days))
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_FAV, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_CART, pre_days, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = get_feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_FAV, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_CART, pre_days, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
+
+    #用户第一次购买前的各个 behavior 数
+    Xmat[:, feature_cnt] = feature_behavior_cnt_before_1st_buy(BEHAVIOR_TYPE_VIEW, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_behavior_cnt_before_1st_buy(BEHAVIOR_TYPE_FAV, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_behavior_cnt_before_1st_buy(BEHAVIOR_TYPE_CART, samples); feature_cnt += 1
+
+    #最后一次操作 item 至 checking_date 的天数的倒数
+    Xmat[:, feature_cnt] = feature_last_opt_item(checking_date, BEHAVIOR_TYPE_VIEW, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_item(checking_date, BEHAVIOR_TYPE_FAV, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_item(checking_date, BEHAVIOR_TYPE_CART, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_item(checking_date, BEHAVIOR_TYPE_BUY, samples); feature_cnt += 1
+
 
 
     ##################################################################################################
