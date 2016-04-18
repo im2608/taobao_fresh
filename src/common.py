@@ -46,7 +46,7 @@ redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=0)
 logging.basicConfig(level=logging.INFO,\
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
                     datefmt='%a, %d %b %Y %H:%M:%S',\
-                    filename='..\\log\\log.test.txt',\
+                    filename='..\\log\\log.test.LR.txt',\
                     filemode='w')
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user):

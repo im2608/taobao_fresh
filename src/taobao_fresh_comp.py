@@ -153,9 +153,10 @@ if (alog == "Apriori"):
         apriori.verificationForecast()
     #apriori.saveFrequentItemToRedis(L)
 elif (alog == "LR"):
-    user_cnt = 50
+    start_from = 50
+    user_cnt = 0
     loadTrainItemInCatalogLevel()
-    LR_common.loadRecordsFromRedis(user_cnt, need_verify)
+    LR_common.loadRecordsFromRedis(start_from, user_cnt, need_verify)
     LR.logisticRegression(user_cnt)
 
 
