@@ -153,7 +153,7 @@ if (alog == "Apriori"):
         apriori.verificationForecast()
     #apriori.saveFrequentItemToRedis(L)
 elif (alog == "LR"):
-    start_from = 50
+    start_from = 0
     user_cnt = 0
     loadTrainItemInCatalogLevel()
     LR_common.loadRecordsFromRedis(start_from, user_cnt, need_verify)
