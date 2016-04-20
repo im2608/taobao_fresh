@@ -138,6 +138,9 @@ factor = 0.1
 #apriori.loadDataAndSaveToRedis(need_verify, data_file)
 print("factor is %.4f, need verify %d" % (factor, need_verify))
 
+print("--------------------------------------------------")
+print("--------------------------------------------------")
+print("--------------------------------------------------")
 
 alog = "LR"
 
@@ -155,7 +158,7 @@ if (alog == "Apriori"):
 elif (alog == "LR"):
     start_from = 0
     user_cnt = 0
-    loadTrainItemInCatalogLevel()
+    loadTrainItem()
     LR_common.loadRecordsFromRedis(start_from, user_cnt, need_verify)
     LR.logisticRegression(user_cnt)
 

@@ -6,7 +6,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn import preprocessing
 from features import *
 from taking_sample import *
-
+import os
 
 
 
@@ -24,12 +24,11 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
     ##################################################################################################
     #######################################商品属性####################################################
     ##################################################################################################
-    # 商品热度 购买该商品的用户/总用户数
-    print("%s getting item popularity by samples..." % getCurrentTime())
     
-    Xmat[:, feature_cnt] = feature_item_popularity(item_popularity_dict, samples); feature_cnt += 1
-    print("%s Total %d samples taken" % (getCurrentTime(), len(samples)))
-    logging.info("%s Total %d samples taken" % (getCurrentTime(), len(samples)))
+    print("%s getting item popularity..." % getCurrentTime())
+
+    # 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品总用户数
+    Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_BUY, item_popularity_dict, samples); feature_cnt += 1
 
     ##################################################################################################
     #######################################用户 - 商品交互属性##########################################
@@ -47,17 +46,17 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
     print("%s calculating user-item b/v ratio..." % getCurrentTime())
     Xmat[:, feature_cnt] = feature_buy_view_ratio(samples); feature_cnt += 1
 
-    #最后一次操作同类型的商品至 checking_date 的天数的倒数
+    # #最后一次操作同类型的商品至 checking_date 的天数
     print("%s calculating last buy..." % getCurrentTime())
-    Xmat[:, feature_cnt] = feature_last_opt_category(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_VIEW, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = feature_last_opt_category(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_FAV, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = feature_last_opt_category(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_CART, samples); feature_cnt += 1
-     Xmat[:, feature_cnt] = feature_last_opt_category(g_user_buy_transection, checking_date, BEHAVIOR_TYPE_BUY, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_category(checking_date, BEHAVIOR_TYPE_VIEW, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_category(checking_date, BEHAVIOR_TYPE_FAV, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_category(checking_date, BEHAVIOR_TYPE_CART, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_last_opt_category(checking_date, BEHAVIOR_TYPE_BUY, samples); feature_cnt += 1
 
-    #用户一共购买过多少同类型的商品 * 最后一天购买至 checking_date 的天数的倒数
-    Xmat[:, feature_cnt] = feature_how_many_buy(Xmat[:, 4], checking_date, samples); feature_cnt += 1
+    #截止到 checking_date（不包括）， 用户一共购买过多少同类型的商品
+    Xmat[:, feature_cnt] = feature_how_many_buy(checking_date, samples); feature_cnt += 1
 
-    # 用户在过去 30 天对 item id 各个behavior type 的次数 / 用户相应的behavior tpye 的次数    
+    # 用户checking_date（不包括）之前 30 天购买（浏览， 收藏， 购物车）该商品的次数/该用户购买（浏览， 收藏， 购物车）所有商品的总数量    
     pre_days = 30
     print("%s get behavior ratios...%d days" % (getCurrentTime(), pre_days))
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
@@ -65,7 +64,7 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_CART, pre_days, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
 
-    # 用户在过去 7 天对 item id 各个behavior type 的次数 / 用户相应的behavior tpye 的次数    
+    # 用户checking_date（不包括）之前 7 天购买（浏览， 收藏， 购物车）该商品的次数/该用户购买（浏览， 收藏， 购物车）所有商品的总数量      
     pre_days = 7
     print("%s get behavior ratios...%d days" % (getCurrentTime(), pre_days))
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
@@ -73,7 +72,7 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_CART, pre_days, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
 
-    # 用户在过去 3 天对 item id 各个behavior type 的次数 / 用户相应的behavior tpye 的次数    
+    # 用户checking_date（不包括）之前 3 天购买（浏览， 收藏， 购物车）该商品的次数/该用户购买（浏览， 收藏， 购物车）所有商品的总数量    
     pre_days = 3
     print("%s get behavior ratios...%d days" % (getCurrentTime(), pre_days))
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
@@ -82,23 +81,23 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_BUY, pre_days, samples); feature_cnt += 1
 
     #用户第一次购买前的各个 behavior 数
+    print("%s behavior count before 1st buy..." % getCurrentTime())
     Xmat[:, feature_cnt] = feature_behavior_cnt_before_1st_buy(BEHAVIOR_TYPE_VIEW, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_behavior_cnt_before_1st_buy(BEHAVIOR_TYPE_FAV, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_behavior_cnt_before_1st_buy(BEHAVIOR_TYPE_CART, samples); feature_cnt += 1
 
     #最后一次操作 item 至 checking_date 的天数的倒数
+    print("%s days from last operation..." % getCurrentTime())
     Xmat[:, feature_cnt] = feature_last_opt_item(checking_date, BEHAVIOR_TYPE_VIEW, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_last_opt_item(checking_date, BEHAVIOR_TYPE_FAV, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_last_opt_item(checking_date, BEHAVIOR_TYPE_CART, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_last_opt_item(checking_date, BEHAVIOR_TYPE_BUY, samples); feature_cnt += 1
 
-
-
     ##################################################################################################
     #######################################    feature end  ##########################################
     ##################################################################################################
 
-    print("Total features %d" % feature_cnt)
+    print("%s Total features %d" % (getCurrentTime(), feature_cnt))
 
 
     #去掉没有用到的features
@@ -106,7 +105,7 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
 
     m, n = np.shape(Xmat)
     print("shape of Xmap (%d, %d)" % (m, n))
-    logging.info("shape of Xmap (%d, %d" % (m, n))
+    logging.info("shape of Xmap (%d, %d)" % (m, n))
     Xmat = np.mat(Xmat)
     logging.info(Xmat)
 
@@ -116,8 +115,8 @@ def logisticRegression(user_cnt):
     userBehaviorStatisticOnRecords(g_user_buy_transection)
     userBehaviorStatisticOnRecords(g_user_behavior_patten)
 
-    logging.info("user behavior count:")
-    logging.info(g_user_behavior_count)
+    # logging.info("user behavior count:")
+    # logging.info(g_user_behavior_count)
 
     positive_samples_cnt_per_user = 10
     nag_per_pos = 5
@@ -127,12 +126,16 @@ def logisticRegression(user_cnt):
     #item 的热度
     print("%s calculating popularity..." % getCurrentTime())
     item_popularity_dict = calculate_item_popularity()
+    print("%s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
+    logging.info("item popularity len is %d" % len(item_popularity_dict))
 
     print("%s taking samples..." % getCurrentTime())
-    samples, Ymat = takingSamples(positive_samples_cnt_per_user, checking_date, nag_per_pos, item_popularity_dict)
-    print("samples count %d, Ymat count %d" % (len(samples), len(Ymat)))
-    logging.info("samples %s" % samples)
-    logging.info("Ymat %s" % Ymat)
+    #samples, Ymat = takingSamples(positive_samples_cnt_per_user, checking_date, nag_per_pos, item_popularity_dict)
+    samples, Ymat = takingSamples2(checking_date, nag_per_pos, item_popularity_dict)
+    print("%s samples count %d, Ymat count %d" % (getCurrentTime(), len(samples), len(Ymat)))
+    if (len(samples) <= 500):
+        logging.info("samples %s" % samples)
+        logging.info("Ymat %s" % Ymat)
 
     Xmat = createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos, samples, item_popularity_dict)
 
@@ -165,7 +168,11 @@ def logisticRegression(user_cnt):
     Xmat_forecast_scaler =min_max_scaler.fit_transform(Xmat_forecast)
     predicted = model.predict(Xmat_forecast_scaler)
 
-    output_file_name = "%s\\..\\output\\forecast.LR.%d.csv" % (runningPath, user_cnt)
+    file_idx = 0
+    output_file_name = "%s\\..\\output\\forecast.LR.%d.%s.%d.csv" % (runningPath, np.shape(Xmat)[1], datetime.date.today(), file_idx)
+    while (os.path.exists(output_file_name)):
+        file_idx += 1
+        output_file_name = "%s\\..\\output\\forecast.LR.%d.%s.%d.csv" % (runningPath, np.shape(Xmat)[1], datetime.date.today(), file_idx)
 
     outputFile = open(output_file_name, encoding="utf-8", mode='w')
     outputFile.write("user_id,item_id\n")

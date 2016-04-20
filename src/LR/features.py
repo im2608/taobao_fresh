@@ -3,25 +3,7 @@ import numpy as np
 from LR_common import *
 
 
-# user id 在 checking date(不包括) 之前 pre_days 天对 item id 进行的behavior type 操作的次数
-def userBehaviorCntOnItemBeforeCheckingDate(user_records, user_id, item_id, behavior_type, checking_date, pre_days):
-    begin_date = checking_date - datetime.timedelta(pre_days)
-    behavior_cnt = 0
 
-    if (user_id not in user_records or item_id not in user_records[user_id]):
-        return 0
-
-    for each_record in user_records[user_id][item_id]:
-        for behavior_consecutive in each_record:
-            if (behavior_type != behavior_consecutive[0]):
-                continue
-
-            if (behavior_consecutive[1].date() >= begin_date and
-                behavior_consecutive[1].date() < checking_date):
-                behavior_cnt += behavior_consecutive[2]
-
-    logging.info("user %s, item %s, begin date %s, behavior type %d, count %d" % (user_id, item_id, begin_date, behavior_type, behavior_cnt))
-    return behavior_cnt
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
@@ -95,57 +77,74 @@ def feature_buy_view_ratio(user_item_pairs):
 
     return buy_view_ratio_list
 
-# 商品热度 购买该商品的用户数/购买同类型商品总用户数
-def calculate_item_popularity():
-    item_popularity_dict = dict()
-    item_category_buy_cnt = dict()
-
-    for user_id, item_buy_records in g_user_buy_transection.items():
-        for item_id in item_buy_records:            
-            item_category = getCatalogByItemId(item_id)
-            if item_category is None:
-                continue
-
-            if (item_id not in item_popularity_dict):
-                item_popularity_dict[item_id] = 0
-            item_popularity_dict[item_id] += 1
-
-            if (item_category not in item_category_buy_cnt):
-                item_category_buy_cnt[item_category] = 0
-            item_category_buy_cnt[item_category] += 1
-
-    for item_id in item_popularity_dict:
-        item_category = getCatalogByItemId(item_id)
-        item_popularity_dict[item_id] = round(item_popularity_dict[item_id]/item_category_buy_cnt[item_category], 4)
-
-    logging.info("item popularity %s" % item_popularity_dict)
-    return item_popularity_dict
-
-# 商品热度 购买该商品的用户数/购买同类型商品总用户数
-def feature_item_popularity(item_popularity_dict, user_item_pairs):
+# 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品的总用户数
+def feature_item_popularity(behavior_type, item_popularity_dict, user_item_pairs):
     item_popularity_list = np.zeros((len(user_item_pairs), 1))
 
     for index in range(len(user_item_pairs)):
         user_id = user_item_pairs[index][0]
         item_id = user_item_pairs[index][1]
-        if (item_id in item_popularity_dict):
-            item_popularity_list[index][0] = item_popularity_dict[item_id]
+        if (item_id in item_popularity_dict and 
+            behavior_type in item_popularity_dict[item_id]):
+            item_popularity_list[index][0] = item_popularity_dict[item_id][behavior_type]
         else:
             item_popularity_list[index][0] = 0
 
     return item_popularity_list
 
 # 用户行为统计
-# 用户checking_date之前 pre_days 天购买（浏览， 收藏， 购物车）该商品的次数/用户购买（浏览， 收藏， 购物车）的总数量
+# 用户checking_date之前 [begin_date, end_date)(不包括end_date) 天购买（浏览， 收藏， 购物车）所有商品的总次数
+def get_behavior_cnt_of_days(user_records, begin_date, end_date, behavior_type, user_id):
+    if (user_id not in user_records):
+        return 0
+    behavior_cnt = 0
+    for item_id, item_opt_records in user_records[user_id].items():
+        for each_record in item_opt_records:
+            for behavior_consecutive in each_record:
+                if (behavior_consecutive[0] == behavior_type and \
+                    behavior_consecutive[1].date() >= begin_date and 
+                    behavior_consecutive[1].date() < end_date):
+                    behavior_cnt += behavior_consecutive[2]
+    return behavior_cnt
+
+# user id 在 checking date(不包括) 之前 pre_days 天对 item id 进行的behavior type 操作的次数
+def userBehaviorCntOnItemBeforeCheckingDate(user_records, user_id, item_id, behavior_type, checking_date, pre_days):
+    begin_date = checking_date - datetime.timedelta(pre_days)
+    behavior_cnt = 0
+
+    if (user_id not in user_records or item_id not in user_records[user_id]):
+        return 0
+
+    for each_record in user_records[user_id][item_id]:
+        for behavior_consecutive in each_record:
+            if (behavior_type != behavior_consecutive[0]):
+                continue
+
+            if (behavior_consecutive[1].date() >= begin_date and
+                behavior_consecutive[1].date() < checking_date):
+                behavior_cnt += behavior_consecutive[2]
+
+    return behavior_cnt
+
+# 用户checking_date（不包括）之前 pre_days 天购买（浏览， 收藏， 购物车）该商品的次数/该用户购买（浏览， 收藏， 购物车）所有商品的总数量    
 def feature_user_item_behavior_ratio(checking_date, behavior_type, pre_days, user_item_pairs):
     user_item_pop = dict()
     user_item_pop_list = np.zeros((len(user_item_pairs), 1))
+    user_behavior_cnt_dict = dict()
     for index in range(len(user_item_pairs)):
         user_id = user_item_pairs[index][0]
         item_id = user_item_pairs[index][1]
 
-        if (g_user_behavior_count[user_id][behavior_type] == 0):
-            user_item_pop[index] = 0
+        total_behavior_cnt = 0
+        if (user_id in user_behavior_cnt_dict):
+            total_behavior_cnt = user_behavior_cnt_dict[user_id]
+        else:
+            begin_date = checking_date - datetime.timedelta(pre_days)
+            total_behavior_cnt = get_behavior_cnt_of_days(g_user_buy_transection, begin_date, checking_date, behavior_type, user_id)
+            total_behavior_cnt += get_behavior_cnt_of_days(g_user_behavior_patten, begin_date, checking_date, behavior_type, user_id)
+
+        user_behavior_cnt_dict[user_id] = total_behavior_cnt
+        if (total_behavior_cnt == 0):
             continue
 
         behavior_cnt = 0
@@ -159,14 +158,16 @@ def feature_user_item_behavior_ratio(checking_date, behavior_type, pre_days, use
             behavior_cnt += userBehaviorCntOnItemBeforeCheckingDate(g_user_behavior_patten, \
                 user_id, item_id, behavior_type, checking_date, pre_days)
 
-        user_item_pop_list[index] = behavior_cnt / g_user_behavior_count[user_id][behavior_type]
+        user_item_pop_list[index] = behavior_cnt / total_behavior_cnt
 
-    logging.info("checking date %s, behavior %d, pre days %d" % (checking_date, behavior_type, pre_days))
+        logging.info("(%s, %s), checking date %s, behavior %d, pre days %d, behavior cnt %d / %d" %
+                     (user_id, item_id, checking_date, behavior_type, pre_days, behavior_cnt, total_behavior_cnt))
+
     logging.info(user_item_pop_list)
     return user_item_pop_list
 
-#用户一共购买过多少同类型的商品 * 最后一天购买至今的天数的倒数
-def feature_how_many_buy(last_buy, checking_date, user_item_pairs):
+#截止到 checking_date（不包括）， 用户一共购买过多少同类型的商品
+def feature_how_many_buy(checking_date, user_item_pairs):
     how_many_buy = np.zeros((len(user_item_pairs), 1))
 
     how_many_buy_dict = {}
@@ -190,15 +191,17 @@ def feature_how_many_buy(last_buy, checking_date, user_item_pairs):
 
             buy_count += len(buy_records)
 
-        how_many_buy_dict[(user_id, item_category)] = buy_count * last_buy[index]
+        how_many_buy_dict[(user_id, item_category)] = buy_count
         how_many_buy[index] = how_many_buy_dict[(user_id, item_category)]
 
     return how_many_buy
 
-# 用户最后一次操作同类型的商品至 checking_date 的天数，
-# 天数需要取倒数
-def get_last_opt_category_date(user_records, checking_date, behavior_type, user_item_pairs):
+# 用户最后一次操作同类型的商品至 checking_date（不包括） 的天数，
+def get_last_opt_category_date(user_records, checking_date, behavior_type, user_id, item_category):
     last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
+    if (user_id not in user_records):
+        return last_opt_date
+
     for item_id_can, item_opt_records in user_records[user_id].items():
         # 不属于同一个 category， skip
         if (getCatalogByItemId(item_id_can) != item_category):
@@ -210,13 +213,14 @@ def get_last_opt_category_date(user_records, checking_date, behavior_type, user_
                     continue
 
                 #each_record 已经按照时间排好序
-                if (each_record[index][1].date() > last_opt_date and \
-                    each_record[index][1].date() <= checking_date):
+                if (each_record[index][1].date() >= last_opt_date and \
+                    each_record[index][1].date() < checking_date):
                     last_opt_date = each_record[index][1].date()
                     break 
 
     return last_opt_date   
 
+# 用户最后一次操作同类型的商品至 checking_date（不包括） 的天数，
 def feature_last_opt_category(checking_date, behavior_type, user_item_pairs):
     days_from_last_opt_cat_dict = dict()
     days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), 1))
@@ -233,47 +237,40 @@ def feature_last_opt_category(checking_date, behavior_type, user_item_pairs):
 
         days_from_last_opt_cat_dict[(user_id, item_category)] = 0
 
-        last_opt_date = get_last_opt_category_date(g_user_buy_transection, checking_date, behavior_type, user_item_pairs)
-        if (behavior_type != BEHAVIOR_TYPE_BUY):
-            last_opt_date2 = get_last_opt_category_date(g_user_behavior_patten, checking_date, behavior_type, user_item_pairs)
+        last_opt_date = get_last_opt_category_date(g_user_buy_transection, checking_date, behavior_type, user_id, item_category)
+        if (behavior_type != BEHAVIOR_TYPE_BUY and user_id in g_user_behavior_patten):
+            last_opt_date2 = get_last_opt_category_date(g_user_behavior_patten, checking_date, behavior_type, user_id, item_category)
             last_opt_date = max(last_opt_date, last_opt_date2)
 
-        days_from_last_opt = checking_date - last_opt_date
-        if (days_from_last_opt.days == 0):
-            #同一天购买取 1
-            days_from_last_opt_cat_dict[(user_id, item_category)] = 1
-        else:
-            #天数取倒数， 时间越远该数字越小
-            days_from_last_opt_cat_dict[(user_id, item_category)] =  1/ days_from_last_opt.days
+        days_from_last_opt_cat_dict[(user_id, item_category)] = (checking_date - last_opt_date).days
 
         days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, item_category)]
-        logging.info("last buy (%s, %s) %d" % (user_id, item_category, days_from_last_opt_cat_dict[(user_id, item_category)]))
+        logging.info("%s last opted %s with %d on %s, days %d" % \
+                     (user_id, item_category, behavior_type, last_opt_date, days_from_last_opt_cat_dict[(user_id, item_category)]))
 
     return days_from_last_opt_cat_list
 
 
-# 用户最后一次操作 item 至 checking_date 的天数，
-# 天数需要取倒数
+# 用户最后一次操作 item 至 checking_date(不包括）) 的天数，
 def get_last_opt_item_date(user_records, checking_date, behavior_type, user_id, item_id):
     last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
     if (user_id not in user_records or item_id not in user_records[user_id]):
         return last_opt_date
 
-    for item_opt_records in user_records[user_id][item_id]:
-        for each_record in item_opt_records:
-            for index in range(len(each_record)-1, -1, -1):
-                if (each_record[index][0] != behavior_type):
-                    continue
+    for each_record in user_records[user_id][item_id]:
+        for index in range(len(each_record)-1, -1, -1):
+            if (each_record[index][0] != behavior_type):
+                continue
 
-                #each_record 已经按照时间排好序
-                if (each_record[index][1].date() >= last_opt_date and \
-                    each_record[index][1].date() <= checking_date):
-                    last_opt_date = each_record[index][1].date()
-                    break 
+            #each_record 已经按照时间排好序
+            if (each_record[index][1].date() >= last_opt_date and \
+                each_record[index][1].date() < checking_date):
+                last_opt_date = each_record[index][1].date()
+                break 
 
     return last_opt_date
 
-#最后一次操作 item 至 checking_date 的天数的倒数
+# 用户最后一次操作 item 至 checking_date(不包括）) 的天数，
 def feature_last_opt_item(checking_date, behavior_type, user_item_pairs):
     days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), 1))
 
@@ -289,17 +286,11 @@ def feature_last_opt_item(checking_date, behavior_type, user_item_pairs):
                                                     behavior_type, user_id, item_id)
             last_opt_date = max(last_opt_date, last_opt_date2)
 
-        days_from_last_opt = checking_date - last_opt_date
-        if (days_from_last_opt.days == 0):
-            #同一天操作取 1
-            days_from_last_opt_cat_dict[(user_id, item_category)] = 1
-        else:
-            #天数取倒数， 时间越远该数字越小
-            days_from_last_opt_cat_dict[(user_id, item_category)] =  1/ days_from_last_opt.days
+        days_from_last_opt = checking_date - last_opt_date  
+        days_from_last_opt_cat_list[index] =  days_from_last_opt.days
 
-        days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, item_category)]
-        logging.info("last behavior %d (%s, %s) %d" % (behavior_type, user_id, item_id, \
-                     days_from_last_opt_cat_dict[(user_id, item_category)]))
+        logging.info("last behavior (%d, %s), (%s, %s) %d" % (behavior_type, last_opt_date, user_id, item_id, \
+                     days_from_last_opt_cat_list[index]))
 
     return days_from_last_opt_cat_list
 
@@ -318,6 +309,7 @@ def get_behavior_cnt_before_date(user_records, behavior_type, before_date, user_
 
     return behavior_cnt
 
+#用户第一次购买 item 前的各个 behavior 数
 def feature_behavior_cnt_before_1st_buy(behavior_type, user_item_pairs):
     behavior_cnt_before_1st_buy_list = np.zeros((len(user_item_pairs), 1))
 
@@ -328,7 +320,7 @@ def feature_behavior_cnt_before_1st_buy(behavior_type, user_item_pairs):
             item_id not in g_user_buy_transection[user_id]):
             continue
 
-        first_buy_date = g_user_buy_transection[user_id][item_id][-1][1].date()
+        first_buy_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
         for each_record in g_user_buy_transection[user_id][item_id]:
             if (first_buy_date < each_record[-1][1].date()):
                 first_buy_date = each_record[-1][1].date()
@@ -338,9 +330,16 @@ def feature_behavior_cnt_before_1st_buy(behavior_type, user_item_pairs):
 
         behavior_cnt += get_behavior_cnt_before_date(g_user_behavior_patten, behavior_type, \
                                                      first_buy_date, user_id, item_id)
-        user_item_pairs[index] = behavior_cnt
-        logging.info("(%s, %s) 1st buy %s, behavior %d cnt  %d" % (user_id, item_id, \
-                     first_buy_date, behavior_type, behavior_cnt)
+        behavior_cnt_before_1st_buy_list[index] = behavior_cnt
+        logging.info("%s (%s, %s) 1st buy %s, behavior %d cnt  %d" % (getCurrentTime(), user_id, item_id, \
+                     first_buy_date, behavior_type, behavior_cnt))
 
     return behavior_cnt_before_1st_buy_list
 
+# user 对 item 购买间隔的平均天数
+def mean_days_between_buy(checking_date, user_item_pairs):
+    samle_cnt = len(user_item_pairs)
+    for user_item in user_item_pairs:
+        user_id = user_item[0]
+        item_id = user_item[1]
+    return 
