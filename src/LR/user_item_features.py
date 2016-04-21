@@ -5,9 +5,9 @@ from LR_common import *
 
 
 ####################################################################################################
+################################  用户与商品的交互特征  ##############################################
 ####################################################################################################
-####################################################################################################
-####################################################################################################
+
 
 #检查user 是否在 checking_date 这一天对 item 有过 behavior type
 def feature_behavior_on_date(behavior_type, checking_date, user_item_pairs):
@@ -167,7 +167,7 @@ def feature_user_item_behavior_ratio(checking_date, behavior_type, pre_days, use
     return user_item_pop_list
 
 #截止到 checking_date（不包括）， 用户一共购买过多少同类型的商品
-def feature_how_many_buy(checking_date, user_item_pairs):
+def feature_how_many_buy_item(checking_date, user_item_pairs):
     how_many_buy = np.zeros((len(user_item_pairs), 1))
 
     how_many_buy_dict = {}
@@ -175,9 +175,7 @@ def feature_how_many_buy(checking_date, user_item_pairs):
     for index in range(len(user_item_pairs)):
         user_id = user_item_pairs[index][0]
         item_id = user_item_pairs[index][1]
-        item_category = getCatalogByItemId(item_id)
-        if item_category == None:
-            continue
+        item_category = global_train_item_category[item_id]
 
         if ((user_id, item_category) in how_many_buy_dict):
             how_many_buy[index] = how_many_buy_dict[(user_id, item_category)]
@@ -186,13 +184,17 @@ def feature_how_many_buy(checking_date, user_item_pairs):
         buy_count = 0
         for item_id_can, buy_records in g_user_buy_transection[user_id].items():
             # 不属于同一个 category， skip
-            if (getCatalogByItemId(item_id_can) != item_category):
+            if (item_id_can not in global_train_item_category or\
+                global_train_item_category[item_id_can] != item_category):
                 continue
 
-            buy_count += len(buy_records)
+            for each_record in buy_records:
+                if (each_record[-1][1].date() < checking_date):
+                    buy_count += 1
 
         how_many_buy_dict[(user_id, item_category)] = buy_count
         how_many_buy[index] = how_many_buy_dict[(user_id, item_category)]
+        logging.info("user %s, category %s, bought %d as of %s" % (user_id, item_category, how_many_buy[index], checking_date))
 
     return how_many_buy
 
@@ -294,7 +296,7 @@ def feature_last_opt_item(checking_date, behavior_type, user_item_pairs):
 
     return days_from_last_opt_cat_list
 
-#用户第一次购买 item 前的各个 behavior 数
+#用户第一次购买 item 前的各个 behavior 的数量
 def get_behavior_cnt_before_date(user_records, behavior_type, before_date, user_id, item_id):
     if (user_id not in user_records or 
         item_id not in user_records[user_id]):
@@ -303,7 +305,7 @@ def get_behavior_cnt_before_date(user_records, behavior_type, before_date, user_
     behavior_cnt = 0
     for each_record in user_records[user_id][item_id]:
         for behavior_consecutive in each_record:
-            if (behavior_consecutive[1].date() <= before_date and 
+            if (behavior_consecutive[1] < before_date and 
                 behavior_consecutive[0] == behavior_type):
                 behavior_cnt += 1
 
@@ -320,10 +322,10 @@ def feature_behavior_cnt_before_1st_buy(behavior_type, user_item_pairs):
             item_id not in g_user_buy_transection[user_id]):
             continue
 
-        first_buy_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
+        first_buy_date = datetime.datetime.strptime("2014-01-01 00", "%Y-%m-%d %H")
         for each_record in g_user_buy_transection[user_id][item_id]:
-            if (first_buy_date < each_record[-1][1].date()):
-                first_buy_date = each_record[-1][1].date()
+            if (first_buy_date < each_record[-1][1]):
+                first_buy_date = each_record[-1][1]
 
         behavior_cnt = get_behavior_cnt_before_date(g_user_buy_transection, behavior_type, \
                                                     first_buy_date, user_id, item_id)
@@ -337,9 +339,27 @@ def feature_behavior_cnt_before_1st_buy(behavior_type, user_item_pairs):
     return behavior_cnt_before_1st_buy_list
 
 # user 对 item 购买间隔的平均天数
-def mean_days_between_buy(checking_date, user_item_pairs):
+def mean_days_between_buy_user_item(user_item_pairs):
     samle_cnt = len(user_item_pairs)
-    for user_item in user_item_pairs:
-        user_id = user_item[0]
-        item_id = user_item[1]
-    return 
+    buy_mean_days_list = np.zeros((len(user_item_pairs), 1))
+
+    for index in range(len(user_item_pairs)):
+        user_id = user_item_pairs[index][0]
+        item_id = user_item_pairs[index][1]
+
+        if (user_id not in g_user_buy_transection or \
+            item_id not in g_user_buy_transection[user_id]):
+            continue
+        buy_date = []
+        for each_record in g_user_buy_transection[user_id][item_id]:
+            buy_date.append(each_record[-1][1].date())
+
+        buy_date.sort()
+        days = 0
+        for date_index in range(1, len(buy_date)):
+            days += (buy_date[date_index] - buy_date[date_index-1]).days
+
+        buy_mean_days_list[index] = round(days / len(buy_date))
+        logging.info("user %s, item %s, mean buy days %d" % (user_id, item_id, buy_mean_days_list[index]))
+
+    return buy_mean_days_list

@@ -139,7 +139,7 @@ factor = 0.1
 print("factor is %.4f, need verify %d" % (factor, need_verify))
 
 print("--------------------------------------------------")
-print("--------------------------------------------------")
+print("--------------- Starting... ----------------------")
 print("--------------------------------------------------")
 
 alog = "LR"
@@ -156,12 +156,18 @@ if (alog == "Apriori"):
         apriori.verificationForecast()
     #apriori.saveFrequentItemToRedis(L)
 elif (alog == "LR"):
+    loadTrainItem()
+
     start_from = 0
     user_cnt = 0
-    loadTrainItem()
     LR_common.loadRecordsFromRedis(start_from, user_cnt, need_verify)
-    LR.logisticRegression(user_cnt)
 
+    need_forecast = 1
+    need_output = 1
+    need_verify = 0
+    checking_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
+    forecast_date = datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
+    LR.logisticRegression(user_cnt, checking_date, forecast_date, need_forecast, need_output, need_verify)
 
 #getUserItemCatalogCnt(data_file)
 
