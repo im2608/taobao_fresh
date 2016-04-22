@@ -120,7 +120,8 @@ def getUserItemCatalogCnt(filename):
 
     return 0
 
-
+def getParamters():
+    return 
 
 ################################################################################################################
 ################################################################################################################
@@ -157,17 +158,30 @@ if (alog == "Apriori"):
     #apriori.saveFrequentItemToRedis(L)
 elif (alog == "LR"):
     loadTrainItem()
+    
+    
+    need_output = 0
 
-    start_from = 0
-    user_cnt = 0
-    LR_common.loadRecordsFromRedis(start_from, user_cnt, need_verify)
-
-    need_forecast = 1
-    need_output = 1
-    need_verify = 0
-    checking_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
-    forecast_date = datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
-    LR.logisticRegression(user_cnt, checking_date, forecast_date, need_forecast, need_output, need_verify)
+    if (need_output == 1):
+        start_from = 0
+        user_cnt = 0
+        need_forecast = 1
+        need_verify = 0
+        checking_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
+        forecast_date = checking_date + datetime.timedelta(1)
+        LR_common.loadRecordsFromRedis(start_from, user_cnt, need_verify)
+        LR.logisticRegression(user_cnt, checking_date, forecast_date, need_forecast, need_output, need_verify)
+    else:
+        # start_from = [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000]
+        # for start in start_from:            
+            start = 50
+            user_cnt = 50
+            need_forecast = 1
+            need_verify = 1
+            checking_date = datetime.datetime.strptime("2014-12-14", "%Y-%m-%d").date()
+            forecast_date = checking_date + datetime.timedelta(1)
+            LR_common.loadRecordsFromRedis(start, user_cnt, need_verify)
+            LR.logisticRegression(user_cnt, checking_date, forecast_date, need_forecast, need_output, need_verify)
 
 #getUserItemCatalogCnt(data_file)
 

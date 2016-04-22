@@ -48,7 +48,7 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt, need_verify):
     user_index = 0
     skiped_user = 0
     for user_id in all_users:
-        # if (user_id != '49818651'):
+        # if (user_id != '110883802'):
         #     continue
 
         if (user_index < start_from):
@@ -102,6 +102,9 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt, need_verify):
 
     print("%s total buy count %d, pattern count %d " % (getCurrentTime(), g_buy_record_cnt, g_pattern_cnt))
     logging.info("%s total buy count %d, pattern count %d " % (getCurrentTime(), g_buy_record_cnt, g_pattern_cnt))
+
+    if (run_for_users_cnt == 50):
+        logging.info(g_user_buy_transection.keys())
 
 def userBehaviorStatisticOnRecords(user_records):
     for user_id, opt_records in user_records.items():

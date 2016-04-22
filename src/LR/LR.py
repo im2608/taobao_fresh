@@ -25,16 +25,36 @@ def createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict)
     feature_cnt = 0
 
     ##################################################################################################
-    #######################################商品属性####################################################
+    ####################################   商品属性   #################################################
     ##################################################################################################
-    
-    print("%s getting item popularity..." % getCurrentTime())
 
-    # 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品总用户数
+    # 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品总用户数    
+    print("%s getting item popularity..." % getCurrentTime())
+    Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_VIEW, item_popularity_dict, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_FAV, item_popularity_dict, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_CART, item_popularity_dict, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_BUY, item_popularity_dict, samples); feature_cnt += 1
 
+
+    # 过去30, 10, 3 天， 各个 behavior 在 item 上的总次数, 各有4 个特征
+    print("%s behavior count in last 30 days..." % getCurrentTime())
+    begin_date = checking_date - datetime.timedelta(30)
+    Xmat[:, feature_cnt : feature_cnt+4] = feature_beahvior_cnt_on_item(begin_date, checking_date, samples); feature_cnt += 4
+
+    print("%s behavior count in last 10 days..." % getCurrentTime())
+    begin_date = checking_date - datetime.timedelta(10)
+    Xmat[:, feature_cnt : feature_cnt+4] = feature_beahvior_cnt_on_item(begin_date, checking_date, samples); feature_cnt += 4
+
+    print("%s behavior count in last 3 days..." % getCurrentTime())
+    begin_date = checking_date - datetime.timedelta(3)
+    Xmat[:, feature_cnt : feature_cnt+4] = feature_beahvior_cnt_on_item(begin_date, checking_date, samples); feature_cnt += 4
+
+    # item 第一次behavior 距离checking date 的天数, 返回 4 个特征
+    print("%s days from 1st behavior..." % getCurrentTime())
+    Xmat[:, feature_cnt : feature_cnt+4] = feature_days_from_1st_behavior(checking_date, samples); feature_cnt += 4
+
     ##################################################################################################
-    #######################################用户 - 商品交互属性##########################################
+    ####################################   用户 - 商品交互属性    s######################################
     ##################################################################################################
     #用户在 checking date 的前 1 天是否对 item id 有过 favorite
     verify_date = checking_date - datetime.timedelta(1)
@@ -100,6 +120,7 @@ def createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict)
     print("%s mean days between buy ..." % getCurrentTime())
     Xmat[:, feature_cnt] = mean_days_between_buy_user_item(samples); feature_cnt += 1
 
+
     ##################################################################################################
     #######################################    用户属性   #############################################
     ##################################################################################################
@@ -118,9 +139,23 @@ def createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict)
     print("%s days from each buy to %s, mean and vairance..." % (getCurrentTime(), checking_date))
     Xmat[:, feature_cnt : feature_cnt+2] = feature_mean_days_between_buy_user(checking_date, samples); feature_cnt += 2
 
-    # 用户最后一次购买至 checking date（不包括）的天数
+    # # 用户最后一次购买至 checking date（不包括）的天数
     print("%s last buy to %s." % (getCurrentTime(), checking_date))
     Xmat[:, feature_cnt] = feature_last_buy_user(checking_date, samples); feature_cnt += 1
+
+    # 截止到checking_date（不包括），
+    # 用户A有1周购买的商品有多少种
+    # 用户A有2周购买的商品有多少种
+    # 用户A有3周购买的商品有多少种
+    # 用户A有4周购买的商品有多少种
+    # 返回 4 个特征
+    print("%s how many buy in weeks..." % getCurrentTime())
+    Xmat[:, feature_cnt : feature_cnt + 4] = feature_how_many_buy_in_weeks(checking_date, samples); feature_cnt += 4
+
+    #截止到checking_date（不包括）， 用户有多少天进行了各种类型的操作
+    # 返回 4 个特征
+    print("%s how many days for behavior..." % getCurrentTime())
+    Xmat[:, feature_cnt : feature_cnt + 4] = feature_how_many_days_for_behavior(checking_date, samples); feature_cnt += 4    
 
     ##################################################################################################
     #######################################    feature end  ##########################################
@@ -144,8 +179,8 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_forecast, ne
     print("=========================  trainning...  ============================")
     print("=====================================================================")
 
-    nag_per_pos = 10
-    
+    nag_per_pos = 15
+
     print("%s checking date %s, nagetive samples per positive ones %d" % (getCurrentTime(), checking_date, nag_per_pos))
 
     #item 的热度

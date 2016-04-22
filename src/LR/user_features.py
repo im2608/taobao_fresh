@@ -57,12 +57,13 @@ def feature_how_many_behavior(begin_date, end_date, need_ratio, user_item_pairs)
                         each_behavior[1].date() < end_date):
                         behavior_cnt[each_behavior[0] - 1] += each_behavior[2]
 
-        for item_id, item_opt_records in g_user_behavior_patten[user_id].items():
-            for each_record in item_opt_records:
-                for each_behavior in each_record:
-                    if (each_behavior[1].date() >= begin_date and \
-                        each_behavior[1].date() < end_date):
-                        behavior_cnt[each_behavior[0] - 1] += each_behavior[2]
+        if (user_id in g_user_behavior_patten):
+            for item_id, item_opt_records in g_user_behavior_patten[user_id].items():
+                for each_record in item_opt_records:
+                    for each_behavior in each_record:
+                        if (each_behavior[1].date() >= begin_date and \
+                            each_behavior[1].date() < end_date):
+                            behavior_cnt[each_behavior[0] - 1] += each_behavior[2]
 
         if (need_ratio):
             for behavior_index in range(3):
@@ -134,3 +135,105 @@ def feature_last_buy_user(checking_date, user_item_pairs):
     logging.info("leaving feature_last_buy_user")
 
     return last_buy_list
+
+#截止到checking_date（不包括）， 用户有多少天进行了各种类型的操作
+# 返回 4 个特征
+def feature_how_many_days_for_behavior(checking_date, user_item_pairs):    
+    logging.info("feature_how_many_days_for_behavior %s" % checking_date)
+    hwo_many_days_for_behavior_dict = dict()
+    hwo_many_days_for_behavior_list = np.zeros((len(user_item_pairs), 4))
+
+    for index in range(len(user_item_pairs)):
+        user_id = user_item_pairs[index][0]
+        if (user_id in hwo_many_days_for_behavior_dict):
+            hwo_many_days_for_behavior_list[index] = hwo_many_days_for_behavior_dict[user_id]
+            continue
+
+        days_for_behavior_dict = dict()
+        days_for_behavior_dict[BEHAVIOR_TYPE_VIEW] = set()
+        days_for_behavior_dict[BEHAVIOR_TYPE_FAV] = set()
+        days_for_behavior_dict[BEHAVIOR_TYPE_CART] = set()
+        days_for_behavior_dict[BEHAVIOR_TYPE_BUY] = set()
+
+        for item_id, item_buy_records in g_user_buy_transection[user_id].items():
+            for each_record in item_buy_records:
+                for each_behavior in each_record:
+                    if (each_behavior[1].date() < checking_date):
+                        days_for_behavior_dict[each_behavior[0]].add(each_behavior[1].date())
+
+        if (user_id in g_user_behavior_patten):
+            for item_id, item_opt_records in g_user_behavior_patten[user_id].items():
+                for each_record in item_opt_records:
+                    for each_behavior in each_record:
+                        if (each_behavior[1].date() < checking_date):
+                            days_for_behavior_dict[each_behavior[0]].add(each_behavior[1].date())
+
+        days_for_behavior = [len(days_for_behavior_dict[x]) for x in range(1, 5)]
+
+        hwo_many_days_for_behavior_list[index] = days_for_behavior
+        hwo_many_days_for_behavior_dict[user_id] = days_for_behavior
+        logging.info("how many dasy for behavior %s %s" % (user_id, days_for_behavior))
+
+    logging.info("leaving feature_how_many_days_for_behavior")
+
+    return hwo_many_days_for_behavior_list
+
+# 返回 user id 在 [week begin, week end) 内的购物列表
+def buy_list_in_week(user_id, week_begin, week_end):
+    buy_set = set()
+    for item_id, item_buy_records in g_user_buy_transection[user_id].items():
+        for each_record in item_buy_records:
+            if (week_begin <= each_record[-1][1].date()  and each_record[-1][1].date() < week_end):
+                buy_set.add(item_id)
+
+    logging.info("%s bought %s from %s to %s" % (user_id, buy_set, week_begin, week_end))
+    return buy_set
+
+# 截止到checking_date（不包括），
+# 用户A有1周购买的商品有多少种
+# 用户A有2周购买的商品有多少种
+# 用户A有3周购买的商品有多少种
+# 用户A有4周购买的商品有多少种
+# 返回 4 个特征
+def feature_how_many_buy_in_weeks(checking_date, user_item_pairs):
+    logging.info("feature_how_many_buy_in_weeks %s " % checking_date)
+
+    how_many_buy_in_weeks_dict = dict()
+    how_many_buy_in_weeks_list = np.zeros((len(user_item_pairs), 4))
+
+    week_end = checking_date
+    weeks_range = []
+    # 得到 4 周的始末时间
+    for i in range(4):
+        week_begin = week_end - datetime.timedelta(7)
+        weeks_range.append((week_begin, week_end))
+        week_end = week_begin
+
+    for index in range(len(user_item_pairs)):
+        user_id = user_item_pairs[index][0]
+
+        if (user_id in how_many_buy_in_weeks_dict):
+            how_many_buy_in_weeks_list[index] = how_many_buy_in_weeks_dict[user_id]
+            continue
+
+        #统计每个 item 出现的次数， 1 -- 4 次
+        buy_count_dict = dict()
+        for each_week in weeks_range:
+            buy_set_for_week =buy_list_in_week(user_id, each_week[0], each_week[1])
+            for item_id in buy_set_for_week:
+                if (item_id not in buy_count_dict):
+                    buy_count_dict[item_id] = 0
+                buy_count_dict[item_id] += 1
+
+        buy_count_for_weeks = [0, 0, 0, 0]
+        for item_id in buy_count_dict:
+            buy_count_for_weeks[buy_count_dict[item_id] - 1] += 1
+
+        how_many_buy_in_weeks_dict[user_id] = buy_count_for_weeks
+        how_many_buy_in_weeks_list[index] = buy_count_for_weeks
+
+        logging.info("user %s %s" % (user_id, buy_count_for_weeks))
+
+    logging.info("leaving feature_how_many_buy_in_weeks")
+
+    return how_many_buy_in_weeks_list

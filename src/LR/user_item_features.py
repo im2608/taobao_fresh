@@ -77,21 +77,6 @@ def feature_buy_view_ratio(user_item_pairs):
 
     return buy_view_ratio_list
 
-# 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品的总用户数
-def feature_item_popularity(behavior_type, item_popularity_dict, user_item_pairs):
-    item_popularity_list = np.zeros((len(user_item_pairs), 1))
-
-    for index in range(len(user_item_pairs)):
-        user_id = user_item_pairs[index][0]
-        item_id = user_item_pairs[index][1]
-        if (item_id in item_popularity_dict and 
-            behavior_type in item_popularity_dict[item_id]):
-            item_popularity_list[index][0] = item_popularity_dict[item_id][behavior_type]
-        else:
-            item_popularity_list[index][0] = 0
-
-    return item_popularity_list
-
 # 用户行为统计
 # 用户checking_date之前 [begin_date, end_date)(不包括end_date) 天购买（浏览， 收藏， 购物车）所有商品的总次数
 def get_behavior_cnt_of_days(user_records, begin_date, end_date, behavior_type, user_id):
@@ -198,11 +183,12 @@ def feature_how_many_buy_item(checking_date, user_item_pairs):
 
     return how_many_buy
 
-# 用户最后一次操作同类型的商品至 checking_date（不包括） 的天数，
-def get_last_opt_category_date(user_records, checking_date, behavior_type, user_id, item_category):
-    last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
+# 用户最后一次操作同类型的商品至 checking_date（不包括） 的天数， 没有的话则返回 checking date
+def get_last_opt_category_date(user_records, checking_date, behavior_type, user_id, item_category):    
     if (user_id not in user_records):
-        return last_opt_date
+        return checking_date
+
+    last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
 
     for item_id_can, item_opt_records in user_records[user_id].items():
         # 不属于同一个 category， skip
@@ -218,7 +204,10 @@ def get_last_opt_category_date(user_records, checking_date, behavior_type, user_
                 if (each_record[index][1].date() >= last_opt_date and \
                     each_record[index][1].date() < checking_date):
                     last_opt_date = each_record[index][1].date()
-                    break 
+                    break
+
+    if (last_opt_date == datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()):
+        return checking_date
 
     return last_opt_date   
 
@@ -255,10 +244,10 @@ def feature_last_opt_category(checking_date, behavior_type, user_item_pairs):
 
 # 用户最后一次操作 item 至 checking_date(不包括）) 的天数，
 def get_last_opt_item_date(user_records, checking_date, behavior_type, user_id, item_id):
-    last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
     if (user_id not in user_records or item_id not in user_records[user_id]):
-        return last_opt_date
+        return checking_date
 
+    last_opt_date = datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()
     for each_record in user_records[user_id][item_id]:
         for index in range(len(each_record)-1, -1, -1):
             if (each_record[index][0] != behavior_type):
@@ -269,6 +258,9 @@ def get_last_opt_item_date(user_records, checking_date, behavior_type, user_id, 
                 each_record[index][1].date() < checking_date):
                 last_opt_date = each_record[index][1].date()
                 break 
+
+    if (last_opt_date == datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()):
+        return checking_date
 
     return last_opt_date
 

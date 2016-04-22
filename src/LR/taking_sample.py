@@ -140,6 +140,7 @@ def takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_pop
     print("         %s calculating posbility range of nagetive records according to item popularity..." % getCurrentTime())
     nagetive_records_cnt = len(nagetive_samples_in_test)
     index = 0
+    # 计算在各个 beahvior 上的 popularity 的总和以及各个 range 所对应的 user_item
     for user_item in nagetive_samples_in_test:
         item_id = user_item[1]
         #没有用户操作过该产品，则 item_popularity_dict 中就没有该 item 
@@ -195,6 +196,9 @@ def takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_pop
                 break
         print("                %d / %d taken\r" % (index, nagetive_records_cnt), end="")
 
+    print("")
+    print("%s nagetive samples %d " % (getCurrentTime(), len(nagetive_samples)))
+    logging.info("takingNagetiveSamples %d " % len(nagetive_samples))
     return nagetive_samples
 
 def filterItemByTestset(user_item_id_set):
