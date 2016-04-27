@@ -37,7 +37,7 @@ global_train_category_item = dict()
 global_totalBehaviorWeightHash = dict()
 global_user_behavior_cnt = dict()
 
-redis_cli = redis.Redis(host='10.57.14.3', port=6379, db=0)
+redis_cli = redis.Redis(host='10.57.14.2', port=6379, db=0)
 
 # CRITICAL 50
 # ERROR    40
@@ -136,11 +136,13 @@ def loadTrainItem():
         item_category = aline[2]
 
         global_train_item_category[item_id] = item_category
+
         if (item_category not in global_train_category_item):
             global_train_category_item[item_category] = set()
         global_train_category_item[item_category].add(item_id)
 
     filehandle2.close()
+
     return 0
 
 def getCatalogByItemId(item_id):
@@ -304,22 +306,96 @@ def getRecordsFromRecordString(buy_records):
             behavior_time  =  datetime.datetime.strptime(behavior[1][1:-1], "%Y-%m-%d %H")
             behavior_count = int(behavior[2])
 
+            each_record.append((behavior_type, behavior_time, behavior_count))
+
             #将连续的但是时间不同的 view 合并成一个
-            #[ (1, time1, cnt1), (1, time2, cnt2), (2, time2, 1) ] 合并成 [ (1, time1, cnt1 + cnt2), (2, time2, 1) ]
-            #[ (1, time1, cnt1), (2, time1, 1), (1, time2, cnt2) ] view 不连续则不合并
-            if (current_view == None and behavior_type == BEHAVIOR_TYPE_VIEW):
-                current_view = [behavior_time, behavior_count]
-            elif (behavior_type == BEHAVIOR_TYPE_VIEW):
-                current_view[1] += behavior_count
-            else:
-                if (current_view != None):
-                    each_record.append((BEHAVIOR_TYPE_VIEW, current_view[0], current_view[1]))
-                    each_record.append((behavior_type, behavior_time, behavior_count))
-                    current_view = None
-                else:
-                    each_record.append((behavior_type, behavior_time, behavior_count))
-        if (current_view != None):
-            each_record.append((BEHAVIOR_TYPE_VIEW, current_view[0], current_view[1]))
+        #     #[ (1, time1, cnt1), (1, time2, cnt2), (2, time2, 1) ] 合并成 [ (1, time2, cnt1 + cnt2), (2, time2, 1) ]
+        #     #[ (1, time1, cnt1), (2, time1, 1), (1, time2, cnt2) ] view 不连续则不合并
+        #     if (current_view == None and behavior_type == BEHAVIOR_TYPE_VIEW):
+        #         current_view = [behavior_time, behavior_count]
+        #     elif (behavior_type == BEHAVIOR_TYPE_VIEW):
+        #         current_view[1] += behavior_count
+        #     else:
+        #         if (current_view != None):
+        #             each_record.append((BEHAVIOR_TYPE_VIEW, current_view[0], current_view[1]))
+        #             each_record.append((behavior_type, behavior_time, behavior_count))
+        #             current_view = None
+        #         else:
+        #             each_record.append((behavior_type, behavior_time, behavior_count))
+        # if (current_view != None):
+        #     each_record.append((BEHAVIOR_TYPE_VIEW, current_view[0], current_view[1]))
 
         all_records.append(each_record)
+
     return all_records
+
+def loadCategoryItemFromRedis():
+    # 得到所有的 catrgory
+    all_categories = redis_cli.get("all_category").decode()
+    all_categories = all_categories.split(",")
+
+    total_category = len(all_categories)
+    print("%s loadCategoryItemFromRedis, here total %d categories" % (getCurrentTime(), total_category))
+
+    index = 0
+    for category in all_categories:
+        items_of_categories = redis_cli.hget("category_" + category, "item_id")
+        items_of_categories = items_of_categories.decode().split(",")
+
+        for item_id in items_of_categories:
+            global_train_item_category[item_id] = category
+            if (category not in global_train_category_item):
+                global_train_category_item[category] = set()
+            global_train_category_item[category].add(item_id)        
+        index += 1
+
+        print("%d / %d categories loaded\r" % (index, total_category), end="")
+
+    return 0
+
+def loadCategoryItemAndSaveToRedis(train_user_file_name = tianchi_fresh_comp_train_user):
+    filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
+    user_behavior = csv.reader(filehandle1)
+
+    category_item_dict = dict()
+
+    index = 0
+    print("loadCategoryItemAndSaveToRedis(): loading file %s" % train_user_file_name)
+    for aline in user_behavior:
+        if (index == 0):
+            index += 1
+            continue
+
+        item_id       = aline[1]
+        item_category = aline[4]
+
+        if (item_category not in category_item_dict):
+            category_item_dict[item_category] = set()
+
+        category_item_dict[item_category].add(item_id)
+        index += 1
+
+        if (index % 100000 == 0):
+             print("%d lines read\r" % index, end="")
+
+    print("%s saving category--item dict to redis..." % getCurrentTime())
+
+    all_categories = list(category_item_dict.keys())
+    redis_cli.set("all_category", ",".join(all_categories))
+    total_category = len(all_categories)
+
+    save_one_time = 1000
+
+    idx = 0
+    pipe = redis_cli.pipeline()
+    for item_category, item_id_set in category_item_dict.items():
+        pipe.hset("category_"+item_category, "item_id", ",".join(item_id_set))
+
+        idx += 1
+        if (idx % save_one_time == 0):
+            pipe.execute()
+
+        print("%d / %d categories saved to redis\r" % (idx, total_category), end="")
+
+    if (idx % save_one_time != 0):
+        pipe.execute()

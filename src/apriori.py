@@ -57,9 +57,9 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
         if (index % 100000 == 0):
             print("%d lines read\r" % index,  end="")
 
-        if (user_id not in  users):
-            index += 1
-            continue
+        # if (user_id not in  users):
+        #     index += 1
+        #     continue
 
         if (user_id not in user_behavior_record):
             user_behavior_record[user_id] = dict()
@@ -173,10 +173,10 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
         index += 1
         print("%d /%d users checked\r" % (index, total_user), end="")
 
-    #saveRecordstoRedis()
+    saveRecordstoRedis()
 
-    logging.info("g_user_behavior_patten %s" % g_user_behavior_patten)
-    logging.info("g_user_buy_transection %s" % g_user_buy_transection)
+    # logging.info("g_user_behavior_patten %s" % g_user_behavior_patten)
+    # logging.info("g_user_buy_transection %s" % g_user_buy_transection)
 
     #logginBuyRecords()
 

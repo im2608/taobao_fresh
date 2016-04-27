@@ -136,8 +136,12 @@ data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_id
 
 need_verify = False
 factor = 0.1
-#apriori.loadDataAndSaveToRedis(need_verify, data_file)
-print("factor is %.4f, need verify %d" % (factor, need_verify))
+
+#apriori.loadDataAndSaveToRedis(need_verify)
+#loadCategoryItemAndSaveToRedis()
+
+
+#loadCategoryItemFromRedis()
 
 print("--------------------------------------------------")
 print("--------------- Starting... ----------------------")
@@ -158,8 +162,7 @@ if (alog == "Apriori"):
     #apriori.saveFrequentItemToRedis(L)
 elif (alog == "LR"):
     loadTrainItem()
-    
-    
+
     need_output = 0
 
     if (need_output == 1):
@@ -174,8 +177,8 @@ elif (alog == "LR"):
     else:
         # start_from = [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000]
         # for start in start_from:            
-            start = 50
-            user_cnt = 50
+            start = 1000
+            user_cnt = 2000
             need_forecast = 1
             need_verify = 1
             checking_date = datetime.datetime.strptime("2014-12-14", "%Y-%m-%d").date()

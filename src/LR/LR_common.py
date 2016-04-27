@@ -67,7 +67,12 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt, need_verify):
         if (len(item_id_list) > 0):
             item_id_list = item_id_list.split(",")
             for item_id in item_id_list:
-                item_buy_record = user_whole_info[bytes(item_id.encode())].decode()
+                try:
+                    item_buy_record = user_whole_info[bytes(item_id.encode())].decode()
+                except KeyError as ex:
+                    print("got KeyError, %s, %s" % (user_id, item_id))
+                    raise ex
+
                 g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
                 logging.info("%s %s buy record %s " % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
                 g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])

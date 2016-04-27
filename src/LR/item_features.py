@@ -90,8 +90,6 @@ def feature_days_from_1st_behavior(checking_date, user_item_pairs):
                     if (each_behavior[1].date() < days_from_1st_behavior[each_behavior[0] - 1]):
                         days_from_1st_behavior[each_behavior[0] - 1] = each_behavior[1].date()
 
-        if (item_id == '81250797'):
-            logging.info("days_from_1st_behavior %s" % days_from_1st_behavior)
 
         days_from_1st_behavior = list(map(lambda x: (checking_date - x).days, days_from_1st_behavior))
         days_from_1st_list[index] = days_from_1st_behavior

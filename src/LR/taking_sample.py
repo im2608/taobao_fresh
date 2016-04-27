@@ -57,10 +57,11 @@ def takingPositiveSamples(checking_date):
 #根据商品热度进行有放回采样， 商品热度作为采样的概率， 所以 item id 相同的 samples 会有相同的采样概率
 def takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_popularity_dict):
     nagetive_sample_candidates = dict()
-    #在购物记录中采样在checking date这一天没有购买的商品
+    
     buy_cnt = len(g_user_buy_transection)
     index = 0
 
+    #在购物记录中采样在checking date这一天没有购买的商品
     for user_id, item_buy_records in g_user_buy_transection.items():
         for item_id, buy_records in item_buy_records.items():
             for each_record in buy_records:
@@ -69,7 +70,7 @@ def takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_pop
                     logging.error("Buy record of %s %s is not Buy" % (user_id, item_id))
                     continue
 
-                if (buy_behavior[1].date() == checking_date):
+                if (buy_behavior[1].date() >= checking_date):
                     continue
 
                 nagetive_sample_candidates[(user_id, item_id)] = 1
@@ -82,8 +83,10 @@ def takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_pop
     pattern_count = len(g_user_behavior_patten)
     index = 0
     for user_id, item_pattern_record in g_user_behavior_patten.items():
-        for item_id in item_pattern_record:
-            nagetive_sample_candidates[(user_id, item_id)] = 1
+        for item_id, item_opt_records in item_pattern_record.items():
+            for each_record in item_opt_records:
+                if (each_record[-1][1].date() <= checking_date):
+                    nagetive_sample_candidates[(user_id, item_id)] = 1
         index += 1
         if (index % 100000 == 0):
             print("                 %d / %d patterns checked\r" % (index, pattern_count), end="")
