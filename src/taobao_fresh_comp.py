@@ -127,7 +127,8 @@ def getParamters():
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
-sys.path.append("%s\\LR\\" % runningPath)
+sys.path.append("%s\\LR-hit\\" % runningPath)
+
 import LR
 import LR_common 
 
@@ -138,10 +139,10 @@ need_verify = False
 factor = 0.1
 
 #apriori.loadDataAndSaveToRedis(need_verify)
-#loadCategoryItemAndSaveToRedis()
+#loadTrainCategoryItemAndSaveToRedis()
 
 
-#loadCategoryItemFromRedis()
+loadTrainCategoryItemFromRedis()
 
 print("--------------------------------------------------")
 print("--------------- Starting... ----------------------")
@@ -150,7 +151,7 @@ print("--------------------------------------------------")
 alog = "LR"
 
 if (alog == "Apriori"):
-    loadTrainItem()
+    loadTestItem()
     apriori.loadRecordsFromRedis(factor, need_verify)
     # apriori.Bayes(need_verify)
 
@@ -161,30 +162,24 @@ if (alog == "Apriori"):
         apriori.verificationForecast()
     #apriori.saveFrequentItemToRedis(L)
 elif (alog == "LR"):
-    loadTrainItem()
+    loadTestItem()
 
     need_output = 0
 
     if (need_output == 1):
         start_from = 0
         user_cnt = 0
-        need_forecast = 1
-        need_verify = 0
         checking_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
         forecast_date = checking_date + datetime.timedelta(1)
         LR_common.loadRecordsFromRedis(start_from, user_cnt, need_verify)
-        LR.logisticRegression(user_cnt, checking_date, forecast_date, need_forecast, need_output, need_verify)
+        LR.logisticRegression(user_cnt, checking_date, forecast_date, need_output)
     else:
-        # start_from = [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000]
-        # for start in start_from:            
-            start = 1000
-            user_cnt = 2000
-            need_forecast = 1
-            need_verify = 1
-            checking_date = datetime.datetime.strptime("2014-12-14", "%Y-%m-%d").date()
-            forecast_date = checking_date + datetime.timedelta(1)
-            LR_common.loadRecordsFromRedis(start, user_cnt, need_verify)
-            LR.logisticRegression(user_cnt, checking_date, forecast_date, need_forecast, need_output, need_verify)
+        start = 2000
+        user_cnt = 2000
+        checking_date = datetime.datetime.strptime("2014-12-17", "%Y-%m-%d").date()
+        forecast_date = checking_date + datetime.timedelta(1)
+        LR_common.loadRecordsFromRedis(start, user_cnt, need_verify)
+        LR.logisticRegression(user_cnt, checking_date, forecast_date, need_output)
 
 #getUserItemCatalogCnt(data_file)
 

@@ -7,30 +7,35 @@ from LR_common import *
 ################################  数据集中，用户的特征  ##############################################
 ####################################################################################################
 
-#用户一共购买过多少商品
-def feature_how_many_buy(user_item_pairs):
-    logging.info("entered feature_how_many_buy")
-    how_many_buy_list = np.zeros((len(user_item_pairs), 1))
-    how_many_buy_dict = dict()
+
+#截止到 checking_date（不包括）， 用户一共购买过多少同类型的商品
+def feature_how_many_buy(checking_date, user_item_pairs):
+    how_many_buy = np.zeros((len(user_item_pairs), 1))
+
+    how_many_buy_dict = {}
 
     for index in range(len(user_item_pairs)):
         user_id = user_item_pairs[index][0]
-        if (user_id in how_many_buy_dict):
-            how_many_buy_list[index] = how_many_buy_dict[user_id]
+        item_id = user_item_pairs[index][1]
+        item_category = global_train_item_category[item_id]
+
+        if ((user_id, item_category) in how_many_buy_dict):
+            how_many_buy[index] = how_many_buy_dict[(user_id, item_category)]
             continue
-        buy_cnt = 0
 
-        for item_id, item_buy_records in g_user_buy_transection[user_id].items():
-            buy_cnt += len(item_buy_records)
+        buy_count = 0
+        for item_id_can, buy_records in g_user_buy_transection[user_id].items():
+            # 不属于同一个 category， skip            
+            if (global_train_item_category[item_id_can] != item_category):
+                continue
+            for each_record in buy_records:
+                if (each_record[-1][1].date() < checking_date):
+                    buy_count += 1
 
-        how_many_buy_list[index] = buy_cnt
-        how_many_buy_dict[user_id] = buy_cnt
-        logging.info("user %s bought %d items" % (user_id, buy_cnt))
+        how_many_buy_dict[(user_id, item_category)] = buy_count
+        how_many_buy[index] = how_many_buy_dict[(user_id, item_category)]
 
-    logging.info("leaving feature_how_many_buy")
-
-    return how_many_buy_list
-
+    return how_many_buy
 
 #在 [begin_date, end_date)时间段内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车
 def feature_how_many_behavior(begin_date, end_date, need_ratio, user_item_pairs):
@@ -68,7 +73,7 @@ def feature_how_many_behavior(begin_date, end_date, need_ratio, user_item_pairs)
         if (need_ratio):
             for behavior_index in range(3):
                 if (behavior_cnt[behavior_index] != 0):
-                    behavior_cnt[behavior_index + 4] = round(behavior_cnt[3] / behavior_cnt[behavior_index], 4)
+                    behavior_cnt[behavior_index + 4] = round(behavior_cnt[3] / (behavior_cnt[3] + behavior_cnt[behavior_index]), 4)
 
         how_many_behavior_list[index] = behavior_cnt
         how_many_behavior_dict[user_id] = behavior_cnt

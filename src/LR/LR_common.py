@@ -60,6 +60,7 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt, need_verify):
 
         #读取购物记录
         g_user_buy_transection[user_id] = dict()
+        logging.info(user_id)
 
         user_whole_info = redis_cli.hgetall(user_id)
 
@@ -74,7 +75,7 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt, need_verify):
                     raise ex
 
                 g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
-                logging.info("%s %s buy record %s " % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
+                #logging.info("%s %s buy record %s " % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
                 g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])
         else:
             user_index += 1
@@ -111,81 +112,31 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt, need_verify):
     if (run_for_users_cnt == 50):
         logging.info(g_user_buy_transection.keys())
 
-def userBehaviorStatisticOnRecords(user_records):
-    for user_id, opt_records in user_records.items():
-        if (user_id not in g_user_behavior_count):
-            g_user_behavior_count[user_id] = dict()
-            g_user_behavior_count[user_id][BEHAVIOR_TYPE_BUY] = 0
-            g_user_behavior_count[user_id][BEHAVIOR_TYPE_VIEW] = 0
-            g_user_behavior_count[user_id][BEHAVIOR_TYPE_FAV] = 0
-            g_user_behavior_count[user_id][BEHAVIOR_TYPE_CART] = 0
-
-        for item_id, item_opt_records in opt_records.items():
-            for each_record in item_opt_records:
-                for behavior_cosecutive in each_record:
-                    g_user_behavior_count[user_id][behavior_cosecutive[0]] += behavior_cosecutive[2]
-    return 0
-
-
-
-# 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品总用户数
-# 若没有用户购买过某产品，则 item_popularity 中就没有该 item 
-# 只计算出现在 test set 中的 item
-def calculate_item_popularity_by_records(user_records, item_popularity_dict, item_category_opt_cnt_dict):
+def getBehaviorCnt(user_records, item_id, checking_date, behavior_cnt):
     for user_id, item_opt_records in user_records.items():
-        for item_id, records in item_opt_records.items():
-            if (item_id not in global_train_item_category):
-                continue
+        if (item_id not in item_opt_records):
+            continue
+        for each_record in item_opt_records[item_id]:
+            for behavior_consecutive in each_record:
+                if (behavior_consecutive[1].date() < checking_date):
+                    behavior_cnt[behavior_consecutive[0] - 1] += behavior_consecutive[2]
 
-            item_category = global_train_item_category[item_id]
-
-            if (item_category not in item_category_opt_cnt_dict):
-                item_category_opt_cnt_dict[item_category] = dict()
-
-            if (item_id not in item_popularity_dict):
-                item_popularity_dict[item_id] = dict()
-
-            behavior_type_counted = set()
-            for each_record in records:
-                if (len(behavior_type_counted) == 4):
-                    break
-
-                for each_behavior in each_record:
-                    if (len(behavior_type_counted) == 4):
-                        break
-
-                    behavior_type = each_behavior[0]
-                    if (behavior_type in behavior_type_counted):
-                        continue
-
-                    behavior_type_counted.add(behavior_type)
-                    if (behavior_type not in item_category_opt_cnt_dict[item_category]):
-                        item_category_opt_cnt_dict[item_category][behavior_type] = 0
-                    item_category_opt_cnt_dict[item_category][behavior_type] += 1
-
-                    if (behavior_type not in item_popularity_dict[item_id]):
-                        item_popularity_dict[item_id][behavior_type] = 0
-                    item_popularity_dict[item_id][behavior_type] += 1
-    return 0
-
-def calculate_item_popularity():
-    #每个 item 在各个 behavior type 上的热度
+#热度： 截止到checking_date（不包括）： （点击数*0.01+购买数*0.94+购物车数*0.47+收藏数*0.33）
+def calculateItemPopularity(checking_date, items_in_nagetive_sampls):
+    logging.info("calculateItemPopularity checking_date %s" % checking_date)
     item_popularity_dict = dict()
+    total_items = len(items_in_nagetive_sampls)
+    index = 0
+    for item_id in items_in_nagetive_sampls:
+        behavior_cnt = [0, 0, 0, 0]
+        getBehaviorCnt(g_user_buy_transection, item_id, checking_date, behavior_cnt)
+        getBehaviorCnt(g_user_behavior_patten, item_id, checking_date, behavior_cnt)
+        popularity = behavior_cnt[0]*0.01 + behavior_cnt[1]*0.33 + behavior_cnt[2]*0.47 + behavior_cnt[3]*0.94
+        item_popularity_dict[item_id] = popularity
+        logging.info("as of %s, %s popularity %s ==> %.1f" % (checking_date, item_id, behavior_cnt, popularity))
+        index += 1
+        print("        %d / %d popularity calculated\r" % (index, total_items), end="")
 
-    #在 category 上进行过各个 behavior type 操作的用户数量
-    item_category_opt_cnt_dict = dict()
+    logging.info("leaving calculateItemPopularity")
 
-    calculate_item_popularity_by_records(g_user_buy_transection, item_popularity_dict, item_category_opt_cnt_dict)
-    calculate_item_popularity_by_records(g_user_behavior_patten, item_popularity_dict, item_category_opt_cnt_dict)
-
-    for item_id in item_popularity_dict:
-        item_category = global_train_item_category[item_id]
-        for behavior_idx in range(1, 5):
-            if (behavior_idx in item_popularity_dict[item_id] and\
-                behavior_idx in item_category_opt_cnt_dict[item_category]):
-                item_popularity_dict[item_id][behavior_idx] = \
-                    round(item_popularity_dict[item_id][behavior_idx]/item_category_opt_cnt_dict[item_category][behavior_idx], 5)
-
-    if (len(item_popularity_dict) <= 500 ):
-        logging.info("item popularity %s" % item_popularity_dict)
     return item_popularity_dict

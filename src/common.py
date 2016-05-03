@@ -30,14 +30,19 @@ global_user_item_dict = dict()
 global_item_user_dict = dict()
 
 # 测试集数据，以 item id 为key
-global_train_item_category = dict()
+global_test_item_category = dict()
 # 测试集数据，以 category 为key
+global_test_category_item = dict()
+
+#训练数据集， 以 item 为 key
+global_train_item_category = dict()
+#训练数据集， 以 category 为 key
 global_train_category_item = dict()
 
 global_totalBehaviorWeightHash = dict()
 global_user_behavior_cnt = dict()
 
-redis_cli = redis.Redis(host='10.57.14.2', port=6379, db=0)
+redis_cli = redis.Redis(host='10.57.14.7', port=6379, db=0)
 
 # CRITICAL 50
 # ERROR    40
@@ -119,7 +124,7 @@ def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1.close()
     return 0
 
-def loadTrainItem():
+def loadTestItem():
     print("%s loading %s" % (getCurrentTime(), tianchi_fresh_comp_train_item))
 
     filehandle2 = open(tianchi_fresh_comp_train_item, encoding="utf-8", mode='r')
@@ -135,19 +140,19 @@ def loadTrainItem():
         item_geohash  = aline[1]
         item_category = aline[2]
 
-        global_train_item_category[item_id] = item_category
+        global_test_item_category[item_id] = item_category
 
-        if (item_category not in global_train_category_item):
-            global_train_category_item[item_category] = set()
-        global_train_category_item[item_category].add(item_id)
+        if (item_category not in global_test_category_item):
+            global_test_category_item[item_category] = set()
+        global_test_category_item[item_category].add(item_id)
 
     filehandle2.close()
 
     return 0
 
 def getCatalogByItemId(item_id):
-    if (item_id in global_train_item_category):
-        return global_train_item_category[item_id]
+    if (item_id in global_test_item_category):
+        return global_test_item_category[item_id]
 
     return None
 
@@ -329,13 +334,13 @@ def getRecordsFromRecordString(buy_records):
 
     return all_records
 
-def loadCategoryItemFromRedis():
+def loadTrainCategoryItemFromRedis():
     # 得到所有的 catrgory
     all_categories = redis_cli.get("all_category").decode()
     all_categories = all_categories.split(",")
 
     total_category = len(all_categories)
-    print("%s loadCategoryItemFromRedis, here total %d categories" % (getCurrentTime(), total_category))
+    print("%s loadCategoryItemFromRedis, here total %d categories in train set" % (getCurrentTime(), total_category))
 
     index = 0
     for category in all_categories:
@@ -353,7 +358,7 @@ def loadCategoryItemFromRedis():
 
     return 0
 
-def loadCategoryItemAndSaveToRedis(train_user_file_name = tianchi_fresh_comp_train_user):
+def loadTrainCategoryItemAndSaveToRedis(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
     user_behavior = csv.reader(filehandle1)
 
