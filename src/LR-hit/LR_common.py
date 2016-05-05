@@ -71,9 +71,6 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt, need_verify):
             for item_id in item_id_list:
                 item_buy_record = user_whole_info[bytes(item_id.encode())].decode()
                 g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
-                if (item_id == '22302304'):
-                    logging.info("%s %s buy record %s " % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
-
                 g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])
         else:
             user_index += 1

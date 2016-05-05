@@ -3,6 +3,7 @@ from LR_common import *
 import numpy as np
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
 from sklearn import preprocessing
 from features import *
 from user_features import *
@@ -17,7 +18,7 @@ import os
 ###############################################################################################################
 ###############################################################################################################
 
-def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos, samples, item_popularity_dict):
+def createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict):
     #预先分配足够的features
     feature_cnt = 100
     Xmat = np.mat(np.zeros((len(samples), feature_cnt)))
@@ -66,7 +67,7 @@ def createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos,
     Xmat[:, feature_cnt] = feature_how_many_buy(checking_date, samples); feature_cnt += 1
 
     # 用户checking_date（不包括）之前 30 天购买（浏览， 收藏， 购物车）该商品的次数/该用户购买（浏览， 收藏， 购物车）所有商品的总数量    
-    pre_days = 30
+    pre_days = 14
     print("%s get behavior ratios...%d days" % (getCurrentTime(), pre_days))
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_VIEW, pre_days, samples); feature_cnt += 1
     Xmat[:, feature_cnt] = feature_user_item_behavior_ratio(checking_date, BEHAVIOR_TYPE_FAV, pre_days, samples); feature_cnt += 1
@@ -127,8 +128,7 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_output):
     # logging.info("user behavior count:")
     # logging.info(g_user_behavior_count)
 
-    positive_samples_cnt_per_user = 10
-    nag_per_pos = 5
+    nag_per_pos = 10
     print("%s checking date %s" % (getCurrentTime(), checking_date))
 
     #item 的热度
@@ -138,13 +138,13 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_output):
     logging.info("item popularity len is %d" % len(item_popularity_dict))
 
     print("%s taking samples..." % getCurrentTime())
-    samples, Ymat = takingSamples(checking_date, nag_per_pos, item_popularity_dict)
+    samples, Ymat = takingSamples(checking_date, nag_per_pos, item_popularity_dict, True)
     print("%s samples count %d, Ymat count %d" % (getCurrentTime(), len(samples), len(Ymat)))
     if (len(samples) <= 500):
         logging.info("samples %s" % samples)
         logging.info("Ymat %s" % Ymat)
 
-    Xmat = createTrainingSet(checking_date, positive_samples_cnt_per_user, nag_per_pos, samples, item_popularity_dict)
+    Xmat = createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict)
 
     min_max_scaler = preprocessing.MinMaxScaler()
     Xmat_scaler = min_max_scaler.fit_transform(Xmat)
@@ -152,6 +152,8 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_output):
     logging.info(Xmat_scaler)
 
     model = LogisticRegression()
+    # model = DecisionTreeClassifier()
+
     model.fit(Xmat_scaler, Ymat)
     expected = Ymat
     predicted = model.predict(Xmat_scaler)
@@ -160,16 +162,21 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_output):
 
     logging.info("=========== predicted =========")
     logging.info(predicted)
+
+    # 每种分类在每个sample 上的概率
+    # predicted_prob = model.predict_proba(Xmat_scaler)
+    # logging.info("=========== predicted Probability (%d, %d)=========" % (np.shape(predicted_prob)[0], np.shape(predicted_prob)[1]))
+    # logging.info(predicted_prob)
+
     # summarize the fit of the model
     print(metrics.classification_report(expected, predicted))
     print(metrics.confusion_matrix(expected, predicted))
     print("=====================================================================")
     print("=========================  forecasting... ===========================")
     print("=====================================================================")
+    samples_test, Ymat_test = takingSamples(checking_date, nag_per_pos, item_popularity_dict, False)
 
-    Xmat_forecast = createTrainingSet(forecast_date, positive_samples_cnt_per_user, nag_per_pos, samples, item_popularity_dict)
-    logging.info("================================")
-    logging.info(Xmat_forecast)
+    Xmat_forecast = createTrainingSet(forecast_date, nag_per_pos, samples_test, item_popularity_dict)
 
     Xmat_forecast_scaler =min_max_scaler.fit_transform(Xmat_forecast)
     predicted = model.predict(Xmat_forecast_scaler)
@@ -189,19 +196,19 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_output):
 
         outputFile.close()
     else:
-        verifyPrediction(forecast_date, samples, predicted)
+        verifyPrediction(forecast_date, samples_test, predicted)
 
     return 0
 
 
 
-def verifyPrediction(forecast_date, samples, predicted):
+def verifyPrediction(forecast_date, samples_test, predicted):
     predicted_user_item = []
     for index in range(len(predicted)):
         if (predicted[index] == 1):
-            predicted_user_item.append(samples[index])
+            predicted_user_item.append(samples_test[index])
 
-    actual_user_item = takingPositiveSamples(forecast_date)
+    actual_user_item = takingPositiveSamples(forecast_date, False)
 
     actual_count = len(actual_user_item)
     predicted_count = len(predicted_user_item)

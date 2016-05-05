@@ -107,11 +107,11 @@ def feature_days_from_last_behavior(checking_date, user_item_pairs):
     for index in range(len(user_item_pairs)):
         item_id = user_item_pairs[index][1]
 
-        if (item_id in days_from_last_list):
-            days_from_last_list[index] = days_from_last_list[item_id]
+        if (item_id in days_from_last_dict):
+            days_from_last_list[index] = days_from_last_dict[item_id]
             continue
 
-        days_from_last_behavior = [datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date() for x in range(4)]
+        days_from_last_behavior = [None for x in range(4)]
 
         for user_id, item_buy_records in g_user_buy_transection.items():
             if (item_id not in item_buy_records):
@@ -119,9 +119,12 @@ def feature_days_from_last_behavior(checking_date, user_item_pairs):
 
             for each_record in item_buy_records[item_id]:
                 for each_behavior in each_record:
-                    if (each_behavior[1].date() > days_from_last_behavior[each_behavior[0] - 1] and 
-                        each_behavior[1].date() < checking_date):
+                    if (days_from_last_behavior[each_behavior[0] - 1] == None):
                         days_from_last_behavior[each_behavior[0] - 1] = each_behavior[1].date()
+                    else:
+                        if (each_behavior[1].date() > days_from_last_behavior[each_behavior[0] - 1] and \
+                            each_behavior[1].date() < checking_date):
+                            days_from_last_behavior[each_behavior[0] - 1] = each_behavior[1].date()
 
         for user_id, item_opt_records in g_user_behavior_patten.items():
             if (item_id not in item_opt_records):
@@ -129,11 +132,20 @@ def feature_days_from_last_behavior(checking_date, user_item_pairs):
 
             for each_record in item_opt_records[item_id]:
                 for each_behavior in each_record:
-                    if (each_behavior[1].date() > days_from_last_behavior[each_behavior[0] - 1] and 
-                        each_behavior[1].date() < checking_date):
+                    if (days_from_last_behavior[each_behavior[0] - 1] == None):
                         days_from_last_behavior[each_behavior[0] - 1] = each_behavior[1].date()
+                    else:
+                        if (each_behavior[1].date() > days_from_last_behavior[each_behavior[0] - 1] and \
+                            each_behavior[1].date() < checking_date):
+                            days_from_last_behavior[each_behavior[0] - 1] = each_behavior[1].date()
 
-        days_from_last_behavior = list(map(lambda x: (checking_date - x).days, days_from_last_behavior))
+        # days_from_last_behavior = list(map(lambda x: (checking_date - x).days, days_from_last_behavior))
+        for index in range(len(days_from_last_behavior)):
+            if (days_from_last_behavior[index] != None):
+                days_from_last_behavior[index] = (checking_date - days_from_last_behavior[index]).days
+            else:
+                days_from_last_behavior[index] = 0
+
         days_from_last_list[index] = days_from_last_behavior
         days_from_last_dict[item_id] = days_from_last_behavior
         logging.info("item %s days from last behavior to %s: %s " % (item_id, checking_date, days_from_last_behavior))
