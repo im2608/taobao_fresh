@@ -1,5 +1,4 @@
 from common import *
-from LR_common import *
 import random
 
 # positive_samples_cnt_per_user 每个用户取得正样本的数量
@@ -18,7 +17,7 @@ def takingSamplesForTraining(checking_date, nag_per_pos, item_popularity_dict):
         samples.append(user_item)
         Ymat.append(1)
 
-    nagetive_samples = takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_popularity_dict)
+    nagetive_samples = takingNagetiveSamples2(checking_date, positive_samples, nag_per_pos, item_popularity_dict)
     for user_item in nagetive_samples:
         samples.append(user_item)
         Ymat.append(0)
@@ -270,7 +269,7 @@ def takingNagetiveSamples2(checking_date, positive_samples, nag_per_pos, item_po
     for user_item in nagetive_sample_candidates:
         #去掉 range 中的小数, 并计算每个 user_item 的 popularity range
         pop_range_end = round(pop_range_start + item_popularity_dict[user_item[1]] * 100)
-        popularity_range_dict[user_item] = (pop_range_start, pop_range_end)
+        popularity_range_dict[(pop_range_start, pop_range_end)] = user_item
         pop_range_start = pop_range_end
         total_popularity += item_popularity_dict[user_item[1]]
 
@@ -278,16 +277,22 @@ def takingNagetiveSamples2(checking_date, positive_samples, nag_per_pos, item_po
 
     nagetive_samples = set()
 
+    sorted_pop_ranges = list(popularity_range_dict.keys())
+    sorted_pop_ranges.sort()
+
     print("        %s total popularity %d" % (getCurrentTime(), total_popularity))
     print("        %s taking nagetive samples..." % getCurrentTime())
     nagetive_sample_cnt = len(positive_samples) * nag_per_pos
     for index in range(nagetive_sample_cnt):
         # 在 total popularity 范围内取随机值
         rand_pop = random.randint(0, total_popularity - 1)
-        for user_item, pop_range in popularity_range_dict.items():
-            if (pop_range[0] <= rand_pop and rand_pop < pop_range[1]):
-                nagetive_samples.add(user_item)
-                break
+        pop_range_index = takeNagetiveSampleByPopularity(sorted_pop_ranges, rand_pop)
+        pop_range = sorted_pop_ranges[pop_range_index]
+        nagetive_samples.add(popularity_range_dict[pop_range])
+        # for user_item, pop_range in popularity_range_dict.items():
+        #     if (pop_range[0] <= rand_pop and rand_pop < pop_range[1]):
+        #         nagetive_samples.add(user_item)
+        #         break
 
         print("        %d / %d nagetive samples taken\r" % (index, nagetive_sample_cnt), end="")
 

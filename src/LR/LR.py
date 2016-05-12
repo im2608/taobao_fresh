@@ -4,6 +4,7 @@ import numpy as np
 from sklearn import metrics
 from sklearn.linear_model import LogisticRegression
 from sklearn import preprocessing
+from sklearn.tree import DecisionTreeClassifier
 #from user_features import *
 from user_item_features import *
 from user_features import *
@@ -144,7 +145,9 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_output):
     # min_max_scaler = preprocessing.MinMaxScaler()
     # Xmat_scaler = min_max_scaler.fit_transform(Xmat)
 
-    model = LogisticRegression()
+    #model = LogisticRegression()
+    model = DecisionTreeClassifier()
+
     model.fit(Xmat, Ymat)
     expected = Ymat
     predicted = model.predict(Xmat)

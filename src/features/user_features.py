@@ -1,6 +1,6 @@
 from common import *
 import numpy as np
-from LR_common import *
+
 
 
 
@@ -22,6 +22,7 @@ def feature_how_many_behavior(begin_date, end_date, user_item_pairs):
         user_id = user_item_pairs[index][0]
         if (user_id in how_many_behavior_dict):
             how_many_behavior_list[index] = how_many_behavior_dict[user_id]
+            continue
 
         #前4 个为浏览，收藏，购物车, 购买的数量， 后3个为比例
         behavior_cnt = [0 for x in range(features)]

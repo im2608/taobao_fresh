@@ -120,17 +120,37 @@ def getUserItemCatalogCnt(filename):
 
     return 0
 
-def getParamters():
-    return 
+    
+
+#"[('41209588', '326492304'), ('25286173', '187742447'), ('129020685', '248639479')]"
+def loadTestingFeaturesFromRedis():    
+    samples_test_str = redis_cli.get("testing_samples").decode()
+
+    #去掉首尾的 [(' and ')]
+    samples_test_str = samples_test_str[3 : len(samples_test_str)-3]
+    # 分割成元组数组
+    samples_test_list = samples_test_str.split("'), ('")
+
+    for index in range(len(samples_test_list)):
+        # 去掉每个元组首尾的( and ):  ('41209588', '326492304')
+        samples_test_list[index] = samples_test_list[index][0 : len(samples_test_list[index]) - 1]
+        user_item = samples_test_list[index].split("', '")
+        samples_test_list[index] = (user_item[0], user_item[1])
+
+    print("load %d tesing samples from redis" % len(samples_test_list))
+    return samples_test_list
 
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
 sys.path.append("%s\\LR-hit\\" % runningPath)
+sys.path.append("%s\\RF\\" % runningPath)
+sys.path.append("%s\\features\\" % runningPath)
+sys.path.append("%s\\samples\\" % runningPath)
 
 import LR
-import LR_common 
+import RF
 
 file_idx = 53
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
@@ -141,17 +161,20 @@ factor = 0.1
 #apriori.loadDataAndSaveToRedis(need_verify)
 #loadTrainCategoryItemAndSaveToRedis()
 
-
-loadTrainCategoryItemFromRedis()
-
 print("--------------------------------------------------")
 print("--------------- Starting... ----------------------")
 print("--------------------------------------------------")
+loadTrainCategoryItemFromRedis()
+loadTestSet()
 
-alog = "LR"
 
-if (alog == "Apriori"):
-    loadTestItem()
+
+need_output = 1
+print("%s ************** output is %d ************" % (getCurrentTime(), need_output))
+
+if (algo == "Apriori"):
+    print("%s ============ Algorithm is Apriori ============" % (getCurrentTime()))
+
     apriori.loadRecordsFromRedis(factor, need_verify)
     # apriori.Bayes(need_verify)
 
@@ -161,25 +184,39 @@ if (alog == "Apriori"):
     if (need_verify):
         apriori.verificationForecast()
     #apriori.saveFrequentItemToRedis(L)
-elif (alog == "LR"):
-    loadTestItem()
 
-    need_output = 0
-
+elif (algo == "LR"):
+    print("%s ============ Algorithm is Logistic Regression ============" % (getCurrentTime()))
     if (need_output == 1):
         start_from = 0
         user_cnt = 0
         checking_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
         forecast_date = checking_date + datetime.timedelta(1)
-        LR_common.loadRecordsFromRedis(start_from, user_cnt, need_verify)
+        loadRecordsFromRedis(start_from, user_cnt)
         LR.logisticRegression(user_cnt, checking_date, forecast_date, need_output)
     else:
-        start = 2000
-        user_cnt = 2000
-        checking_date = datetime.datetime.strptime("2014-12-17", "%Y-%m-%d").date()
+        start = 0
+        user_cnt = 0
+        checking_date = datetime.datetime.strptime("2014-12-05", "%Y-%m-%d").date()
         forecast_date = checking_date + datetime.timedelta(1)
-        LR_common.loadRecordsFromRedis(start, user_cnt, need_verify)
+        loadRecordsFromRedis(start, user_cnt)
         LR.logisticRegression(user_cnt, checking_date, forecast_date, need_output)
+elif (algo == "RF"):
+    print("%s ============ Algorithm is Random Forest ============" % (getCurrentTime()))
+    if (need_output == 1):
+        start_from = 0
+        user_cnt = 0
+        checking_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
+        forecast_date = checking_date + datetime.timedelta(1)
+        loadRecordsFromRedis(start_from, user_cnt)
+        RF.randomForest(user_cnt, checking_date, forecast_date, need_output)
+    else:
+        start = 0
+        user_cnt = 2000
+        checking_date = datetime.datetime.strptime("2014-12-05", "%Y-%m-%d").date()
+        forecast_date = checking_date + datetime.timedelta(1)
+        loadRecordsFromRedis(start, user_cnt)
+        RF.randomForest(user_cnt, checking_date, forecast_date, need_output)
 
 #getUserItemCatalogCnt(data_file)
 

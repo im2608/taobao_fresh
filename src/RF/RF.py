@@ -1,8 +1,6 @@
 from common import *
 import numpy as np
 from sklearn import metrics
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import preprocessing
 from features import *
@@ -10,8 +8,7 @@ from user_features import *
 from item_features import *
 from taking_sample import *
 import os
-
-#35ebe50
+import csv
 
 ###############################################################################################################
 ###############################################################################################################
@@ -45,7 +42,8 @@ def createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict)
 
     print("%s getting item popularity..." % getCurrentTime())
     # 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品总用户数
-    Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_BUY, item_popularity_dict, samples); feature_cnt += 1
+    #Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_BUY, item_popularity_dict, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_item_popularity2(item_popularity_dict, samples); feature_cnt += 1
 
     ##################################################################################################
     #######################################用户 - 商品交互属性##########################################
@@ -92,7 +90,7 @@ def createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict)
     #######################################   用户属性   ##############################################
     ##################################################################################################
     
-    #在 [begin_date, end_date)时间段内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车的比率
+    # 在 [begin_date, end_date)时间段内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车的比率
     for last_days in [14, 7, 3]:
         print("%s user's behavior count in last %d days" % (getCurrentTime(), last_days))
         begin_date = checking_date - datetime.timedelta(last_days)
@@ -114,14 +112,14 @@ def createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict)
 
     return Xmat
 
-def logisticRegression(user_cnt, checking_date, forecast_date, need_output):    
+def randomForest(user_cnt, checking_date, forecast_date, need_output):    
     nag_per_pos = 10
     print("%s checking date %s" % (getCurrentTime(), checking_date))
 
     # #item 的热度
     print("%s calculating popularity..." % getCurrentTime())
-    item_popularity_dict = calculate_item_popularity()
-    #item_popularity_dict = calculateItemPopularity(checking_date)
+    #item_popularity_dict = calculate_item_popularity()
+    item_popularity_dict = calculateItemPopularity(checking_date)
     print("%s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
     logging.info("item popularity len is %d" % len(item_popularity_dict))
 
@@ -134,18 +132,19 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_output):
     # min_max_scaler = preprocessing.MinMaxScaler()
     # Xmat_scaler = min_max_scaler.fit_transform(Xmat)
 
-    model = LogisticRegression()
-    model.fit(Xmat, Ymat)
+    rfcls = RandomForestClassifier(n_estimators=100)
+    rfcls.fit(Xmat, Ymat)
     expected = Ymat
-    predicted = model.predict(Xmat)
-    predicted_prob = model.predict_proba(Xmat)
 
+    predicted = rfcls.predict(Xmat)
     logging.info("=========== expected =========")
     logging.info(expected)
 
     logging.info("=========== predicted =========")
     logging.info(predicted)
 
+    # 每种分类在每个sample 上的概率 predicted_prob[index][0] -- 0 的概率， predicted_prob[index][1] -- 1 的概率
+    predicted_prob = rfcls.predict_proba(Xmat)
     logging.info("=========== predicted Probability (%d, %d)=========" % (np.shape(predicted_prob)[0], np.shape(predicted_prob)[1]))
     logging.info(predicted_prob)
 
@@ -153,34 +152,36 @@ def logisticRegression(user_cnt, checking_date, forecast_date, need_output):
     print(metrics.classification_report(expected, predicted))
     print(metrics.confusion_matrix(expected, predicted))
 
-    min_proba = 0.7
+    min_proba = 0.5
     print("=====================================================================")
-    print("=========================  forecasting...(%.1f) ==================" % min_proba)
+    print("=========================  forecasting...(%.1f) =====================" % min_proba)
     print("=====================================================================")
 
     print("%s taking samples for forecasting (%s, %d)" % (getCurrentTime(), forecast_date, nag_per_pos))
     samples_test = takingSamplesForTesting(forecast_date)
 
     Xmat_forecast = createTrainingSet(forecast_date, nag_per_pos, samples_test, item_popularity_dict)
-
     # Xmat_forecast_scaler =min_max_scaler.fit_transform(Xmat_forecast)
-    # predicted = model.predict(Xmat_forecast)
-    # 每种分类在每个sample 上的概率 predicted_prob[index][0] -- 0 的概率， predicted_prob[index][1] -- 1 的概率
-    predicted_prob = model.predict_proba(Xmat_forecast)
 
+    predicted_prob = rfcls.predict_proba(Xmat_forecast)
+    loggingProbility(predicted_prob)
+    
     if (need_output == 1):
         file_idx = 0
-        output_file_name = "%s\\..\\output\\forecast.LR.%d.%s.%d.csv" % (runningPath, np.shape(Xmat)[1], datetime.date.today(), file_idx)
+        output_file_name = "%s\\..\\output\\forecast.RF.%d.%s.%d.csv" % (runningPath, np.shape(Xmat)[1], datetime.date.today(), file_idx)
         while (os.path.exists(output_file_name)):
             file_idx += 1
-            output_file_name = "%s\\..\\output\\forecast.LR.%d.%s.%d.csv" % (runningPath, np.shape(Xmat)[1], datetime.date.today(), file_idx)
+            output_file_name = "%s\\..\\output\\forecast.RF.%d.%s.%d.csv" % (runningPath, np.shape(Xmat)[1], datetime.date.today(), file_idx)
 
         print("%s outputting %s" % (getCurrentTime(), output_file_name))
-        outputFile = open(output_file_name, encoding="utf-8", mode='w')
+        outputFile = open(output_file_name, mode='w')
+        outputFileWriter = csv.writer(outputFile, delimiter=',', quoting=csv.QUOTE_NONE)
+        #outputFileWriter.writerow(["user_id", "item_id"])
         outputFile.write("\"user_id\",\"item_id\"\n")
         for index in range(len(predicted_prob)):
             if (predicted_prob[index][1] >= min_proba):
-                outputFile.write("\"%s\",\"%s\"\n" % (samples_test[index][0], samples_test[index][1]))
+                outputFile.write("%s,%s\n" % (samples_test[index][0], samples_test[index][1]))
+                #outputFileWriter.writerow([samples_test[index], samples_test[index]])
 
         outputFile.close()
     else:

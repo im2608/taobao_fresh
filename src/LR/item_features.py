@@ -7,9 +7,11 @@ from LR_common import *
 def feature_item_popularity(item_popularity_dict, user_item_pairs):
     item_popularity_list = np.zeros((len(user_item_pairs), 1))
 
-    for index in range(len(user_item_pairs)):
+    total_cnt = len(user_item_pairs)
+    for index in range(total_cnt):
         item_id = user_item_pairs[index][1]
         item_popularity_list[index][0] = item_popularity_dict[item_id]
+        print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     return item_popularity_list
 
@@ -19,7 +21,8 @@ def feature_beahvior_cnt_on_item(begin_date, checking_date, user_item_pairs):
     item_behavior_cnt_dict = dict()
     item_behavior_cnt_list = np.zeros((len(user_item_pairs), 4))
 
-    for index in range(len(user_item_pairs)):
+    total_cnt = len(user_item_pairs)
+    for index in range(total_cnt):
         item_id = user_item_pairs[index][1]
 
         if (item_id in item_behavior_cnt_dict):
@@ -49,6 +52,7 @@ def feature_beahvior_cnt_on_item(begin_date, checking_date, user_item_pairs):
         item_behavior_cnt_dict[item_id] = behavior_cnt
 
         logging.info("item %s %s from %s to %s" % (item_id, behavior_cnt, begin_date, checking_date))
+        print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     logging.info("leaving feature_beahvior_cnt_on_item")
     return item_behavior_cnt_list
@@ -58,6 +62,7 @@ def feature_days_from_1st_behavior(checking_date, user_item_pairs):
     days_from_1st_dict = dict()
     days_from_1st_list = np.zeros((len(user_item_pairs), 4))
 
+    total_cnt = len(user_item_pairs)
     for index in range(len(user_item_pairs)):
         item_id = user_item_pairs[index][1]
 
@@ -90,6 +95,7 @@ def feature_days_from_1st_behavior(checking_date, user_item_pairs):
         days_from_1st_list[index] = days_from_1st_behavior
         days_from_1st_dict[item_id] = days_from_1st_behavior
         logging.info("item %s days from 1st behavior to %s: %s " % (item_id, checking_date, days_from_1st_behavior))
+        print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     return days_from_1st_list
 
