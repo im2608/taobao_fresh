@@ -13,7 +13,7 @@ USER_GEO = "user_geohash"
 ITEM_CATE = "item_category"
 TIME = "time"
 
-algo = "RF"
+algo = "GBDT"
 
 BEHAVIOR_TYPE_VIEW = 1
 BEHAVIOR_TYPE_FAV  = 2
@@ -435,6 +435,10 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
     global g_buy_record_cnt_verify
     global g_pattern_cnt
 
+    g_user_buy_transection.clear()
+    g_user_buy_transection_item.clear()
+    g_user_behavior_patten.clear()
+
     # 得到所有的用户
     all_users = redis_cli.get("all_users").decode()
     all_users = all_users.split(",")
@@ -479,9 +483,6 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
                 g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
                 g_user_buy_transection_item[item_id][user_id] = g_user_buy_transection[user_id][item_id]                
                 g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])
-                if (user_id == '20231406'):
-                    logging.info("%s %s buy records are %s" % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
-
         else:
             user_index += 1
             skiped_user += 1
@@ -517,6 +518,10 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
 
     print("%s total buy count %d, pattern count %d " % (getCurrentTime(), g_buy_record_cnt, g_pattern_cnt))
     logging.info("%s total buy count %d, pattern count %d " % (getCurrentTime(), g_buy_record_cnt, g_pattern_cnt))
+
+    removeBuyCausedByDouble12()
+
+    return
 
 def calculate_item_popularity_by_records(user_records, item_popularity_dict, item_category_opt_cnt_dict):
     for user_id, item_opt_records in user_records.items():
@@ -568,7 +573,7 @@ def calculate_item_popularity():
     return item_popularity_dict
 
 
-def getBehaviorCnt(user_records, checking_date, item_behavior_cnt_dict):
+def getBehaviorCnt(user_records, window_start_date, window_end_date, item_behavior_cnt_dict):
     for user_id, item_opt_records in user_records.items():
         for item_id, records in item_opt_records.items():
             if (item_id not in item_behavior_cnt_dict):
@@ -576,17 +581,18 @@ def getBehaviorCnt(user_records, checking_date, item_behavior_cnt_dict):
 
             for each_record in records:
                 for behavior_consecutive in each_record:
-                    if (behavior_consecutive[1].date() < checking_date):
+                    if (behavior_consecutive[1].date() >= window_start_date and
+                        behavior_consecutive[1].date() < window_end_date):
                         item_behavior_cnt_dict[item_id][behavior_consecutive[0] - 1] += behavior_consecutive[2]
 
-#热度： 截止到checking_date（不包括）： （点击数*0.01+购买数*0.94+购物车数*0.47+收藏数*0.33）
-def calculateItemPopularity(checking_date):
-    logging.info("calculateItemPopularity checking_date %s" % checking_date)
+#热度： [window_start_date, window_end_date) 窗口内： （点击数*0.01+购买数*0.94+购物车数*0.47+收藏数*0.33）
+def calculateItemPopularity(window_start_date, window_end_date):
+    logging.info("calculateItemPopularity.. ")
     item_popularity_dict = dict()
     item_behavior_cnt_dict = dict()
 
-    getBehaviorCnt(g_user_buy_transection, checking_date, item_behavior_cnt_dict)
-    getBehaviorCnt(g_user_behavior_patten, checking_date, item_behavior_cnt_dict)
+    getBehaviorCnt(g_user_buy_transection, window_start_date, window_end_date, item_behavior_cnt_dict)
+    getBehaviorCnt(g_user_behavior_patten, window_start_date, window_end_date, item_behavior_cnt_dict)
     index = 0
     total_items = len(item_behavior_cnt_dict)
     for item_id, behavior_cnt in item_behavior_cnt_dict.items():
@@ -609,3 +615,109 @@ def loggingProbility(predicted_prob):
         if (predicted_prob[i][1] > predicted_prob[i][0]):
             logging.info("%.4f, %.4f" % (predicted_prob[i][0], predicted_prob[i][1]))
     return 
+
+
+
+def verifyPrediction(forecast_date, samples_test, predicted_prob, min_proba):
+    predicted_user_item = []
+    for index in range(len(predicted_prob)):
+        if (predicted_prob[index][1] >= min_proba):
+            predicted_user_item.append(samples_test[index])
+
+    actual_user_item = takingPositiveSamples(forecast_date)
+
+    actual_count = len(actual_user_item)
+    predicted_count = len(predicted_user_item)
+
+    hit_count = 0
+    user_hit_list = set()
+
+    for user_item in predicted_user_item:
+        logging.info("predicted %s , %s" % (user_item[0], user_item[1]))
+        if (user_item in actual_user_item):
+            hit_count += 1
+
+    for user_item in predicted_user_item:
+        for user_item2 in actual_user_item:
+            if (user_item[0] == user_item2[0]):
+                user_hit_list.add(user_item[0])
+
+    if (len(user_hit_list) > 0):
+        logging.info("hit user: %s" % user_hit_list)
+
+    print("hit user: %s" % user_hit_list)
+
+    for user_item in actual_user_item:
+        logging.info("acutal buy %s , %s" % (user_item[0], user_item[1]))
+
+    print("forecasting date %s, positive count %d, predicted count %d, hit count %d" %\
+          (forecast_date, actual_count, predicted_count, hit_count))
+
+    if (predicted_count != 0):
+        p = hit_count / predicted_count
+    else:
+        p = 0
+
+    if (actual_count != 0):
+        r = hit_count / actual_count
+    else:
+        r = 0
+
+    if (p != 0 or r != 0):        
+        f1 = 2 * p * r / (p + r)
+    else:
+        f1 = 0
+
+    print("precission: %.4f, recall %.4f, F1 %.4f" % (p, r, f1))
+
+    return
+
+
+
+#用户从 1st view 到buy 的平均天数
+def meanDaysFromViewToBuy():
+    days_from_view_to_buy = dict()
+
+    days = 0
+    for user_id, item_buy_records in g_user_buy_transection.items():
+        for item_id, buy_records in item_buy_records.items():
+            for each_record in buy_records:
+                days += (each_record[-1][1].date() - each_record[0][1].date()).days
+        days_from_view_to_buy[user_id] = round(days / len(g_user_buy_transection[user_id]))
+        days = 0
+
+    return days_from_view_to_buy
+
+# 去掉由于双12导致的购买记录
+def removeBuyCausedByDouble12():
+    being_removed_user_item = dict()
+
+    mean_days_from_view_to_buy = meanDaysFromViewToBuy()
+
+    #从1st view 到12-12这天购买的天数少于平均天数，则认为是由于12-12导致的购买，则去掉
+    december_twelve = datetime.datetime.strptime("2014-12-12", "%Y-%m-%d").date()
+    for user_id, item_buy_records in g_user_buy_transection.items():
+       for item_id, buy_records in item_buy_records.items():
+            for each_record in buy_records:
+                if (each_record[-1][1].date() != december_twelve):
+                    continue
+                days_from_view_to_buy = (each_record[-1][1].date() - each_record[0][1].date()).days
+                if (days_from_view_to_buy < mean_days_from_view_to_buy[user_id]):
+                    if (user_id not in being_removed_user_item):
+                        being_removed_user_item[user_id] = set()
+
+                    being_removed_user_item[user_id].add(item_id)
+                    logging.info("deleting buy record %s - %s caused by 12-12, days %d, mean days %d" % 
+                                 (user_id, item_id, days_from_view_to_buy, mean_days_from_view_to_buy[user_id]))
+    removed_records = 0
+    for user_id, item_list in being_removed_user_item.items():
+        for item_id in item_list:
+            del(g_user_buy_transection[user_id][item_id])
+            removed_records += 1
+
+        if (len(g_user_buy_transection[user_id]) == 0):
+            del(g_user_buy_transection[user_id])
+            logging.info("user %s has no buy records, delete it" % user_id)
+
+    logging.info("total %d buy records deleted caused by 12-12" % removed_records)
+    return     

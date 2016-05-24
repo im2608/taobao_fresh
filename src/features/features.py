@@ -48,7 +48,7 @@ def feature_behavior_on_date(behavior_type, checking_date, user_item_pairs):
 ######################################################################################################
 
 #截止到checking date(不包括)， 用户在category 上的购买浏览转化率 在category上购买过的数量/浏览过的category数量
-def feature_buy_view_ratio(checking_date, user_item_pairs):
+def feature_buy_view_ratio(window_start_date, window_end_date, user_item_pairs):
     buy_view_ratio_dict = dict()
 
     buy_view_ratio_list = np.zeros((len(user_item_pairs), 1))
@@ -70,7 +70,8 @@ def feature_buy_view_ratio(checking_date, user_item_pairs):
             if (global_train_item_category[item_id_can] != item_category):
                 continue
             for each_record in item_buy_records:
-                if (each_record[-1][1].date() < checking_date):
+                if (each_record[-1][1].date() < window_end_date and 
+                    each_record[-1][1].date >= window_start_date):
                     buy_count += 1
 
         # 没有pattern， 所有的view 都转化成了buy
@@ -86,7 +87,7 @@ def feature_buy_view_ratio(checking_date, user_item_pairs):
         buy_view_ratio_dict[(user_id, item_category)] = round(buy_count / (buy_count + len(viewed_categories)), 4)
         buy_view_ratio_list[index, 0] = buy_view_ratio_dict[(user_id, item_category)]
         logging.info("as of %s, %s bought category %s %d, viewed %d, ratio %.4f" % \
-                     (checking_date, user_id, item_category, buy_count, len(viewed_categories), buy_view_ratio_list[index, 0]))
+                     (window_end_date, user_id, item_category, buy_count, len(viewed_categories), buy_view_ratio_list[index, 0]))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -173,9 +174,9 @@ def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs):
 ######################################################################################################
 
 
-#截止到 checking_date（不包括）， 用户一共购买过多少同类型的商品
+#[window_start_date, window_end_date) 时间内， 用户一共购买过多少同类型的商品
 
-def feature_how_many_buy(checking_date, user_item_pairs):
+def feature_how_many_buy(window_start_date, window_end_date, user_item_pairs):
     how_many_buy = np.zeros((len(user_item_pairs), 1))
 
     how_many_buy_dict = {}
@@ -196,7 +197,10 @@ def feature_how_many_buy(checking_date, user_item_pairs):
             if (global_train_item_category[item_id_can] != item_category):
                 continue
 
-            buy_count += len(buy_records)
+            for each_record in buy_records:
+                if (each_record[-1][1].date() >= window_start_date and 
+                    each_record[-1][1].date() < window_end_date)
+                    buy_count += 1
 
         how_many_buy_dict[(user_id, item_category)] = buy_count
         how_many_buy[index] = how_many_buy_dict[(user_id, item_category)]
@@ -212,13 +216,13 @@ def feature_how_many_buy(checking_date, user_item_pairs):
 
 # 用户最后一次操作同类型的商品至 checking_date（不包括） 的天数，
 # todo： 此处有个问题： 如果用户连续购买了同一个item，则此处会有多条相同的购物记录，但是函数中没有处理这种情况
-def get_last_opt_category_date(user_records, checking_date, user_id, item_category):
+def get_last_opt_category_date(user_records, window_start_date, window_end_date, user_id, item_category):
     days = [0, 0, 0, 0]
 
     if (user_id not in user_records):
         return days
 
-    last_opt_date = [datetime.datetime.strptime("2014-01-01", "%Y-%m-%d").date()  for x in range(4)]
+    last_opt_date = [window_start_date for x in range(4)]
 
     for item_id_can, item_opt_records in user_records[user_id].items():
         # 不属于同一个 category， skip
@@ -230,15 +234,15 @@ def get_last_opt_category_date(user_records, checking_date, user_id, item_catego
                 #each_record 已经按照时间排好序
                 behavior_type = each_record[index][0]
                 behavior_date = each_record[index][1].date()
-                if (behavior_date >= last_opt_date[behavior_type - 1] and \
-                    behavior_date < checking_date):
+                if (behavior_date > last_opt_date[behavior_type - 1] and \
+                    behavior_date < window_end_date):
                     last_opt_date[behavior_type - 1] = behavior_date
-                    days[behavior_type - 1] = (checking_date - behavior_date).days
+                    days[behavior_type - 1] = (window_end_date - behavior_date).days
     return days
 
-# 用户最后一次操作同类型的商品至 checking_date（不包括） 的天数，返回4个特征
+# 用户最后一次操作同类型的商品至 window_end_date （不包括） 的天数，返回4个特征
 # todo： 此处有个问题： 如果用户连续购买了同一个item，则此处会有多条相同的购物记录，但是函数中没有处理这种情况
-def feature_last_opt_category(checking_date, user_item_pairs):
+def feature_last_opt_category(window_start_date, window_end_date, user_item_pairs):
     days_from_last_opt_cat_dict = dict()
     days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), 4))
 
@@ -253,9 +257,9 @@ def feature_last_opt_category(checking_date, user_item_pairs):
             days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, item_category)]
             continue
 
-        days = get_last_opt_category_date(g_user_buy_transection, checking_date, user_id, item_category)
+        days = get_last_opt_category_date(g_user_buy_transection, window_start_date, window_end_date, user_id, item_category)
         if (user_id in g_user_behavior_patten):
-            days2 = get_last_opt_category_date(g_user_behavior_patten, checking_date, user_id, item_category)
+            days2 = get_last_opt_category_date(g_user_behavior_patten, window_start_date, window_end_date, user_id, item_category)
             for index in range(len(days)):
                 if (days[index] == 0):
                     if (days2 != 0):
@@ -267,7 +271,7 @@ def feature_last_opt_category(checking_date, user_item_pairs):
 
         days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, item_category)]
         logging.info("%s last opted category %s, days %s to %s" % \
-                     (user_id, item_category, days_from_last_opt_cat_dict[(user_id, item_category)], checking_date))
+                     (user_id, item_category, days_from_last_opt_cat_dict[(user_id, item_category)], window_end_date))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -486,4 +490,6 @@ def feature_mean_days_between_buy_user_category(checking_date, user_item_pairs):
 ######################################################################################################
 ######################################################################################################
 ######################################################################################################
+
+
 

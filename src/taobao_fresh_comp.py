@@ -146,11 +146,13 @@ def loadTestingFeaturesFromRedis():
 ################################################################################################################
 sys.path.append("%s\\LR-hit\\" % runningPath)
 sys.path.append("%s\\RF\\" % runningPath)
+sys.path.append("%s\\GBDT\\" % runningPath)
 sys.path.append("%s\\features\\" % runningPath)
 sys.path.append("%s\\samples\\" % runningPath)
 
 import LR
 import RF
+import GBDT
 
 file_idx = 53
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
@@ -166,8 +168,6 @@ print("--------------- Starting... ----------------------")
 print("--------------------------------------------------")
 loadTrainCategoryItemFromRedis()
 loadTestSet()
-
-
 
 need_output = 1
 print("%s ************** output is %d ************" % (getCurrentTime(), need_output))
@@ -217,19 +217,11 @@ elif (algo == "RF"):
         forecast_date = checking_date + datetime.timedelta(1)
         loadRecordsFromRedis(start, user_cnt)
         RF.randomForest(user_cnt, checking_date, forecast_date, need_output)
-
-#getUserItemCatalogCnt(data_file)
-
-
-# loadData()
-# checkItemExisting()
-#calItemCategoryWeight()
-#directBuy()
-#userCF.UserCollaborativeFiltering()
-#userCF.recommendationUserCF(5)
-#itemCF.ItemCollaborativeFiltering()
-
-
-
-#splitHistoryData(tianchi_fresh_comp_train_user, 100)
-#checkItem(tianchi_fresh_comp_train_user, tianchi_fresh_comp_train_item)
+elif (algo == "GBDT")        :
+    print("%s ============ Algorithm is GBDT ============" % (getCurrentTime()))
+    start = 0
+    user_cnt = 0
+    checking_date = datetime.datetime.strptime("2014-12-05", "%Y-%m-%d").date()
+    forecast_date = checking_date + datetime.timedelta(1)
+    loadRecordsFromRedis(start, user_cnt)
+    GBDT.GradientBoostingRegressionTree(checking_date, forecast_date, need_output)

@@ -42,8 +42,8 @@ def createTrainingSet(checking_date, nag_per_pos, samples, item_popularity_dict)
 
     print("%s getting item popularity..." % getCurrentTime())
     # 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品总用户数
-    #Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_BUY, item_popularity_dict, samples); feature_cnt += 1
-    Xmat[:, feature_cnt] = feature_item_popularity2(item_popularity_dict, samples); feature_cnt += 1
+    Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_BUY, item_popularity_dict, samples); feature_cnt += 1
+    #Xmat[:, feature_cnt] = feature_item_popularity2(item_popularity_dict, samples); feature_cnt += 1
 
     ##################################################################################################
     #######################################用户 - 商品交互属性##########################################
@@ -118,8 +118,8 @@ def randomForest(user_cnt, checking_date, forecast_date, need_output):
 
     # #item 的热度
     print("%s calculating popularity..." % getCurrentTime())
-    #item_popularity_dict = calculate_item_popularity()
-    item_popularity_dict = calculateItemPopularity(checking_date)
+    item_popularity_dict = calculate_item_popularity()
+    #item_popularity_dict = calculateItemPopularity(checking_date)
     print("%s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
     logging.info("item popularity len is %d" % len(item_popularity_dict))
 
@@ -154,7 +154,7 @@ def randomForest(user_cnt, checking_date, forecast_date, need_output):
 
     min_proba = 0.5
     print("=====================================================================")
-    print("=========================  forecasting...(%.1f) =====================" % min_proba)
+    print("  forecasting (%s), (%.2f)" % (forecast_date, min_proba))
     print("=====================================================================")
 
     print("%s taking samples for forecasting (%s, %d)" % (getCurrentTime(), forecast_date, nag_per_pos))
@@ -175,86 +175,13 @@ def randomForest(user_cnt, checking_date, forecast_date, need_output):
 
         print("%s outputting %s" % (getCurrentTime(), output_file_name))
         outputFile = open(output_file_name, mode='w')
-        outputFileWriter = csv.writer(outputFile, delimiter=',', quoting=csv.QUOTE_NONE)
-        #outputFileWriter.writerow(["user_id", "item_id"])
-        outputFile.write("\"user_id\",\"item_id\"\n")
+        outputFile.write("user_id,item_id\n")
         for index in range(len(predicted_prob)):
             if (predicted_prob[index][1] >= min_proba):
                 outputFile.write("%s,%s\n" % (samples_test[index][0], samples_test[index][1]))
-                #outputFileWriter.writerow([samples_test[index], samples_test[index]])
 
         outputFile.close()
     else:
         verifyPrediction(forecast_date, samples_test, predicted_prob, min_proba)
-
-    return 0
-
-def verifyPrediction(forecast_date, samples_test, predicted_prob, min_proba):
-    predicted_user_item = []
-    for index in range(len(predicted_prob)):
-        if (predicted_prob[index][1] >= min_proba):
-            predicted_user_item.append(samples_test[index])
-
-    actual_user_item = takingPositiveSamples(forecast_date)
-
-    actual_count = len(actual_user_item)
-    predicted_count = len(predicted_user_item)
-
-    hit_count = 0
-    user_hit_list = set()
-
-    for user_item in predicted_user_item:
-        logging.info("predicted %s , %s" % (user_item[0], user_item[1]))
-        if (user_item in actual_user_item):
-            hit_count += 1
-
-    for user_item in predicted_user_item:
-        for user_item2 in actual_user_item:
-            if (user_item[0] == user_item2[0]):
-                user_hit_list.add(user_item[0])
-
-    if (len(user_hit_list) > 0):
-        logging.info("hit user: %s" % user_hit_list)
-
-    print("hit user: %s" % user_hit_list)
-
-    for user_item in actual_user_item:
-        logging.info("acutal buy %s , %s" % (user_item[0], user_item[1]))
-
-    print("forecasting date %s, positive count %d, predicted count %d, hit count %d" %\
-          (forecast_date, actual_count, predicted_count, hit_count))
-
-    if (predicted_count != 0):
-        p = hit_count / predicted_count
-    else:
-        p = 0
-
-    if (actual_count != 0):
-        r = hit_count / actual_count
-    else:
-        r = 0
-
-    if (p != 0 or r != 0):        
-        f1 = 2 * p * r / (p + r)
-    else:
-        f1 = 0
-
-    print("precission: %.4f, recall %.4f, F1 %.4f" % (p, r, f1))
-
-
-
-def saveTesingFeaturesToRedis():
-
-    loadRecordsFromRedis(0, 50)
-    forecast_date = datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
-    samples_test = takingSamplesForTesting(forecast_date)
-    # redis_cli.set("testing_samples", samples_test)
-    # print("%s saving %d testing samples to reids" % (getCurrentTime(), len(samples_test)))
-
-    print("%s getting item popularity..." % getCurrentTime())
-    verify_date = forecast_date - datetime.timedelta(1)
-    print("%s calculating %s FAV ..." % (getCurrentTime(), verify_date))
-    features = feature_behavior_on_date(BEHAVIOR_TYPE_FAV, verify_date, samples_test)
-    redis_cli.set("feature_behavior_on_date", features.A)
 
     return 0

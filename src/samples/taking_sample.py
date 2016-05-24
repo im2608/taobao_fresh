@@ -6,35 +6,37 @@ import random
 # 根据 checking_date 进行采样
 # 正样本为用户在 checking_date 这一天购买过的商品，
 # 负样本为用户操作过但是没有购买的商品，或是购买过但不是在 checking_date 这一天购买的商品
-def takingSamplesForTraining(checking_date, nag_per_pos, item_popularity_dict):
+def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict):
     samples = []
     Ymat = []
     index = 0
     total_positive = 0
     totoal_nagetive = 0
-    positive_samples = takingPositiveSamples(checking_date)
+    positive_samples = takingPositiveSamples(window_end_date)
     for user_item in positive_samples:
         samples.append(user_item)
         Ymat.append(1)
 
-    nagetive_samples = takingNagetiveSamples2(checking_date, positive_samples, nag_per_pos, item_popularity_dict)
+    nagetive_samples = takingNagetiveSamples2(window_start_date, window_end_date, positive_samples, nag_per_pos, item_popularity_dict)
     for user_item in nagetive_samples:
         samples.append(user_item)
         Ymat.append(0)
 
     return samples, Ymat
 
-def takingPositiveSamples(checking_date):
+def takingPositiveSamples(window_start_date, window_end_date):
+    print("        %s taking positive samples..." % (getCurrentTime()))
     positive_samples = set()
     buy_cnt = len(g_user_buy_transection)
     index = 0
     for user_id, item_buy_records in g_user_buy_transection.items():
         for item_id, buy_records in item_buy_records.items():
             for each_record in buy_records:
-                if (each_record[-1][1].date() == checking_date):
+                if (each_record[-1][1].date() == window_end_date and 
+                    each_record[0][1].date >= window_start_date and
+                    item_id in global_test_item_category):
                     positive_samples.add((user_id, item_id))
         index += 1
-        print("        postive samples %d / %d\r " % (index, buy_cnt), end="")
 
     positive_samples_in_validate = list(positive_samples)
     print("        %s positive smaple %d" % (getCurrentTime(), len(positive_samples)))
@@ -42,19 +44,20 @@ def takingPositiveSamples(checking_date):
 
 
 #user 在 item 上的某条记录是否能作为负样本
-def shouldTakeNagetiveSample(checking_date, user_id, item_id):
+def shouldTakeNagetiveSample(window_start_date, window_end_date, user_id, item_id):
     # 用户从未购买过任何物品则不能作为负样本
-    if (user_id not in g_user_buy_transection):
+    # item 不在测试集中不能作为负样本
+    if (user_id not in g_user_buy_transection or 
+        item_id not in global_test_item_category):
         return False
 
     # item 是否被 收藏 or 购物车, 若item只被浏览过则不能作为负样本
     for each_record in g_user_behavior_patten[user_id][item_id]:
         for behavior_consecutive in each_record:
-            if (behavior_consecutive[1].date() < checking_date and\
+            if (behavior_consecutive[1].date() < window_end_date and
+                behavior_consecutive[1].date >= window_start_date
                 behavior_consecutive[0] != BEHAVIOR_TYPE_VIEW):
                 return True
-
-    #logging.info("user %s item %s has only viewed." % (user_id, item_id))
 
     return False
 
@@ -235,29 +238,29 @@ def takeNagetiveSampleByPopularity(popularity_range_list, rand_popularity):
     return -1
 
 
-def takingNagetiveSamples2(checking_date, positive_samples, nag_per_pos, item_popularity_dict):
+def takingNagetiveSamples2(window_start_date, window_end_date, positive_samples, nag_per_pos, item_popularity_dict):
     nagetive_sample_candidates = dict()
 
     buy_cnt = len(g_user_buy_transection)
-    index = 0    
-    #在购物记录中得到在checking date这一天没有购买的商品作为负样本
-    for user_id, item_buy_records in g_user_buy_transection.items():
-        for item_id, buy_records in item_buy_records.items():
-            if (item_id not in global_test_item_category):
-                continue
+    index = 0
+    # 在购物记录中得到在 window_end_date 这一天没有购买的商品作为负样本
+    # for user_id, item_buy_records in g_user_buy_transection.items():
+    #     for item_id, buy_records in item_buy_records.items():
+    #         if (item_id not in global_test_item_category):
+    #             continue
 
-            for each_record in buy_records:
-                buy_behavior = each_record[-1]
-                if (buy_behavior[1].date() >= checking_date):
-                    continue
+    #         for each_record in buy_records:
+    #             buy_behavior = each_record[-1]
+    #             if (buy_behavior[1].date() >= window_end_date):
+    #                 continue
 
-                nagetive_sample_candidates[(user_id, item_id)] = 1                
-        index += 1
-        print("        nagetive samples not bought on checking date %d / %d\r " % (index, buy_cnt), end="")
+    #             nagetive_sample_candidates[(user_id, item_id)] = 1                
+    #     index += 1
+    #     print("        nagetive samples not bought on checking date %d / %d\r " % (index, buy_cnt), end="")
 
     for user_id, item_pattern_records in g_user_behavior_patten.items():
         for item_id in item_pattern_records:
-            if (shouldTakeNagetiveSample(checking_date, user_id, item_id)):
+            if (shouldTakeNagetiveSample(window_start_date, window_end_date, user_id, item_id)):
                 nagetive_sample_candidates[(user_id, item_id)] = 1
 
     popularity_range_dict = dict()
@@ -289,11 +292,6 @@ def takingNagetiveSamples2(checking_date, positive_samples, nag_per_pos, item_po
         pop_range_index = takeNagetiveSampleByPopularity(sorted_pop_ranges, rand_pop)
         pop_range = sorted_pop_ranges[pop_range_index]
         nagetive_samples.add(popularity_range_dict[pop_range])
-        # for user_item, pop_range in popularity_range_dict.items():
-        #     if (pop_range[0] <= rand_pop and rand_pop < pop_range[1]):
-        #         nagetive_samples.add(user_item)
-        #         break
-
         print("        %d / %d nagetive samples taken\r" % (index, nagetive_sample_cnt), end="")
 
     return nagetive_samples
