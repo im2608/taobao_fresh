@@ -227,6 +227,11 @@ elif (algo == "GBDT")        :
     GBDT.GradientBoostingRegressionTree(checking_date, forecast_date, need_output)
 
 
+
+print("=====================================================================")
+print("=========================  training...   ============================")
+print("=====================================================================")
+
 start_from = 0
 user_cnt = 200
 window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
@@ -237,11 +242,59 @@ loadRecordsFromRedis(start_from, user_cnt)
 
 while (window_end_date <= final_end_date):    
     if (features_importance is None):
-        features_importance = GBDT.GBDT_slideWindows(window_start_date, window_end_date)
+        features_importance = GBDT.GBDT_slideWindows(window_start_date, window_end_date, True)
     else:
-        features_importance += GBDT.GBDT_slideWindows(window_start_date, window_end_date)
+        features_importance += GBDT.GBDT_slideWindows(window_start_date, window_end_date, True)
 
     window_end_date += datetime.timedelta(1)
-    window_start_date += datetime.timedelta(1)
+    window_start_date += datetime.timedelta(1)    
+
+useful_features = features_importance[features_importance > 0.0]
+for feature_idx in useful_features:
+    for feature_name in g_feature_info:
+        if (g_feature_info[feature_name] == feature_idx):
+            g_useful_feature_info[feature_name] = feature_idx
+            break
 
 logging.info("After split window, features_importance is " % features_importance)    
+
+print("=====================================================================")
+print("=========================  forecasting...============================")
+print("=====================================================================")
+
+window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
+window_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
+forecast_date = datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
+nag_per_pos = 10
+
+print("        %s checking date %s" % (getCurrentTime(), checking_date))
+
+# #item 的热度
+print("        %s calculating popularity..." % getCurrentTime())
+#item_popularity_dict = calculate_item_popularity()
+item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
+print("        %s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
+
+samples, Ymat = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
+
+print("        %s taking samples for forecasting (%s, %d)" % (getCurrentTime(), window_end_date, nag_per_pos))
+samples, Ymat = takingSamplesForTesting(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
+print("        %s samples count %d, Ymat count %d" % (getCurrentTime(), len(samples), len(Ymat)))
+
+Xmat = createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, item_popularity_dict, False)
+
+Xmat, Ymat = shuffle(Xmat, Ymat, random_state=13)
+
+params = {'n_estimators': 100, 
+          'max_depth': 4,
+          'min_samples_split': 1,
+          'learning_rate': 0.01, 
+          'loss': 'ls'
+          }
+
+clf = GradientBoostingRegressor(**params)
+clf.fit(Xmat, Ymat)
+
+X_leaves = clf.apply(Xmat)
+
+samples_test = takingSamplesForTesting(forecast_date)
