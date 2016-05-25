@@ -225,3 +225,23 @@ elif (algo == "GBDT")        :
     forecast_date = checking_date + datetime.timedelta(1)
     loadRecordsFromRedis(start, user_cnt)
     GBDT.GradientBoostingRegressionTree(checking_date, forecast_date, need_output)
+
+
+start_from = 0
+user_cnt = 200
+window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
+window_end_date = datetime.datetime.strptime("2014-11-27", "%Y-%m-%d").date()
+final_end_date = datetime.datetime.strptime("2014-12-01", "%Y-%m-%d").date()
+features_importance = None
+loadRecordsFromRedis(start_from, user_cnt)
+
+while (window_end_date <= final_end_date):    
+    if (features_importance is None):
+        features_importance = GBDT.GBDT_slideWindows(window_start_date, window_end_date)
+    else:
+        features_importance += GBDT.GBDT_slideWindows(window_start_date, window_end_date)
+
+    window_end_date += datetime.timedelta(1)
+    window_start_date += datetime.timedelta(1)
+
+logging.info("After split window, features_importance is " % features_importance)    

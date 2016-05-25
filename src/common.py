@@ -13,7 +13,7 @@ USER_GEO = "user_geohash"
 ITEM_CATE = "item_category"
 TIME = "time"
 
-algo = "GBDT"
+algo = ""
 
 BEHAVIOR_TYPE_VIEW = 1
 BEHAVIOR_TYPE_FAV  = 2
@@ -43,6 +43,12 @@ global_train_category_item = dict()
 global_totalBehaviorWeightHash = dict()
 global_user_behavior_cnt = dict()
 
+# feature 名称及其在矩阵中的索引
+g_feature_info = dict()
+
+# 训练完成后，保存 g_feature_info 有效的特征
+g_useful_feature_info = dict()
+
 redis_cli = redis.Redis(host='10.57.14.7', port=6379, db=0)
 
 
@@ -57,6 +63,28 @@ logging.basicConfig(level=logging.INFO,\
                     datefmt='%a, %d %b %Y %H:%M:%S',\
                     filename='..\\log\\log.%s.txt' % algo,\
                     filemode='w')
+
+# 判断子特征矩阵的所有特征有哪些是有效的
+def featuresForForecasting(features_names):
+    useful_features = []
+    for i, name in features_names:
+        if (name in g_useful_feature_info):
+            useful_features.append(i)
+
+    return useful_features
+
+
+def getUsefulFeatures(during_training, cur_total_feature_cnt, feature_mat, features_names, useful_features):
+    # 若是在训练过程中， 则保留子特征矩阵的所有列, 返回所有的特征名， 并记录下它们在特征矩阵中的索引
+    if (during_training):
+        for i, name in enumerate(features_names)
+            g_feature_info[name] = cur_total_feature_cnt + i
+        return feature_mat, len(feature_name)
+    else:
+        # 不是在训练过程中（在预测过程中）， useful_features 指明了子特征矩阵中的哪些特征是有效的，只返回那些有效的子特征        
+        feature_mat_useful  = np.zeros(np.shape(feature_mat)[0], len(useful_features)))
+        feature_mat_useful[:, useful_features] = feature_mat[:, useful_features]
+        return feature_mat_useful, len(useful_features)
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
@@ -599,7 +627,8 @@ def calculateItemPopularity(window_start_date, window_end_date):
         popularity = behavior_cnt[0]*0.01 + behavior_cnt[1]*0.33 + behavior_cnt[2]*0.47 + behavior_cnt[3]*0.94
         item_popularity_dict[item_id] = popularity
 
-        logging.info("as of %s, %s popularity %s ==> %.1f" % (checking_date, item_id, behavior_cnt, popularity))
+        logging.info("%s to %s, %s popularity %s ==> %.1f" % 
+                    (window_start_date, window_end_date, item_id, behavior_cnt, popularity))
 
         index += 1
         if (index % 1000 == 0):

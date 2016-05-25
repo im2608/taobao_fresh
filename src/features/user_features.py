@@ -9,8 +9,22 @@ import numpy as np
 ####################################################################################################
 
 #在 [begin_date, end_date)时间段内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车的比率
-def feature_how_many_behavior(begin_date, end_date, user_item_pairs):
+def feature_how_many_behavior_user(begin_date, end_date, user_item_pairs, during_training, cur_total_feature_cnt):
     logging.info("entered feature_how_many_behavior(%s, %s)" % (begin_date, end_date))
+
+    features_names = ["feature_how_many_behavior_user_view", 
+                      "feature_how_many_behavior_user_fav",
+                      "feature_how_many_behavior_user_cart",
+                      "feature_how_many_behavior_user_buy",
+                      "feature_how_many_behavior_user_buy_view_ratio",
+                      "feature_how_many_behavior_user_buy_fav_ratio",
+                      "feature_how_many_behavior_user_buy_cart_ratio"]
+
+    useful_features = None
+    if (not during_training):
+        useful_features = featuresForForecasting(features_names)
+        if (len(useful_features) == 0):
+            return None, 0
 
     features = 7
 
@@ -53,11 +67,24 @@ def feature_how_many_behavior(begin_date, end_date, user_item_pairs):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     logging.info("leaving feature_how_many_behavior")
-    return how_many_behavior_list
+    return getUsefulFeatures(during_training, cur_total_feature_cnt, how_many_behavior_list, features_names, useful_features)
+
+
+######################################################################################################
+######################################################################################################
+######################################################################################################
 
 # 用户在 checking date（不包括） 之前每次购买日期距 checking date 的天数的平均值和方差, 返回两个特征
-def feature_mean_days_between_buy_user(checking_date, user_item_pairs):
+def feature_mean_days_between_buy_user(checking_date, user_item_pairs, during_training):
     logging.info("entered feature_mean_days_between_buy_user(%s)" % checking_date)
+
+    features_names = ["feature_mean_days_between_buy_user_mean", "feature_mean_days_between_buy_user_variance"]
+    useful_features = None
+    if (not during_training):
+        useful_features = featuresForForecasting(features_names)
+        if (len(useful_features) == 0):
+            return None, 0
+
     mean_days_between_buy_dict = dict()
     mean_days_between_list = np.zeros((len(user_item_pairs), 2))
 
@@ -87,12 +114,20 @@ def feature_mean_days_between_buy_user(checking_date, user_item_pairs):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     logging.info("leaving feature_mean_days_between_buy_user")
+    return getUsefulFeatures(during_training, cur_total_feature_cnt, mean_days_between_list, features_names, useful_features)
 
-    return mean_days_between_list
+
+######################################################################################################
+######################################################################################################
+######################################################################################################
 
 # 用户最后一次购买行为至 checking date（不包括）的天数, 没有购买过则为0
-def feature_last_buy_user(checking_date, user_item_pairs):
+def feature_last_buy_user(checking_date, user_item_pairs, during_training, cur_total_feature_cnt):
     logging.info("entered feature_last_buy_user(%s)" % checking_date)
+
+    feature_name = "feature_last_buy_user"
+    if (not during_training and feature_name not in g_useful_feature_info):
+        return None, 0
 
     last_buy_dict = dict()
     last_buy_list = np.zeros((len(user_item_pairs), 1))
@@ -119,14 +154,23 @@ def feature_last_buy_user(checking_date, user_item_pairs):
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
+    if (during_training):
+        g_feature_info[cur_total_feature_cnt] = feature_name
+
     logging.info("leaving feature_last_buy_user")
 
-    return last_buy_list
+    return last_buy_list, 1
+
+
+######################################################################################################
+######################################################################################################
+######################################################################################################
 
 #截止到checking_date（不包括）， 用户有多少天进行了各种类型的操作
 # 返回 4 个特征
-def feature_how_many_days_for_behavior(checking_date, user_item_pairs):    
+def feature_how_many_days_for_behavior(checking_date, user_item_pairs, during_training):    
     logging.info("feature_how_many_days_for_behavior %s" % checking_date)
+
     hwo_many_days_for_behavior_dict = dict()
     hwo_many_days_for_behavior_list = np.zeros((len(user_item_pairs), 4))
 
@@ -168,6 +212,11 @@ def feature_how_many_days_for_behavior(checking_date, user_item_pairs):
 
     return hwo_many_days_for_behavior_list
 
+
+######################################################################################################
+######################################################################################################
+######################################################################################################
+
 # 返回 user id 在 [week begin, week end) 内的购物列表
 def buy_list_in_week(user_id, week_begin, week_end):
     buy_set = set()
@@ -185,7 +234,7 @@ def buy_list_in_week(user_id, week_begin, week_end):
 # 用户A有3周购买的商品有多少种
 # 用户A有4周购买的商品有多少种
 # 返回 4 个特征
-def feature_how_many_buy_in_weeks(checking_date, user_item_pairs):
+def feature_how_many_buy_in_weeks(checking_date, user_item_pairs, during_training, cur_total_feature_cnt):
     logging.info("feature_how_many_buy_in_weeks %s " % checking_date)
 
     how_many_buy_in_weeks_dict = dict()
@@ -230,3 +279,8 @@ def feature_how_many_buy_in_weeks(checking_date, user_item_pairs):
     logging.info("leaving feature_how_many_buy_in_weeks")
 
     return how_many_buy_in_weeks_list
+
+
+######################################################################################################
+######################################################################################################
+######################################################################################################

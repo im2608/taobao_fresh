@@ -12,7 +12,7 @@ def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, it
     index = 0
     total_positive = 0
     totoal_nagetive = 0
-    positive_samples = takingPositiveSamples(window_end_date)
+    positive_samples = takingPositiveSamples(window_start_date, window_end_date)
     for user_item in positive_samples:
         samples.append(user_item)
         Ymat.append(1)
@@ -33,7 +33,7 @@ def takingPositiveSamples(window_start_date, window_end_date):
         for item_id, buy_records in item_buy_records.items():
             for each_record in buy_records:
                 if (each_record[-1][1].date() == window_end_date and 
-                    each_record[0][1].date >= window_start_date and
+                    each_record[0][1].date() >= window_start_date and
                     item_id in global_test_item_category):
                     positive_samples.add((user_id, item_id))
         index += 1
@@ -55,7 +55,7 @@ def shouldTakeNagetiveSample(window_start_date, window_end_date, user_id, item_i
     for each_record in g_user_behavior_patten[user_id][item_id]:
         for behavior_consecutive in each_record:
             if (behavior_consecutive[1].date() < window_end_date and
-                behavior_consecutive[1].date >= window_start_date
+                behavior_consecutive[1].date() >= window_start_date and
                 behavior_consecutive[0] != BEHAVIOR_TYPE_VIEW):
                 return True
 
@@ -143,7 +143,7 @@ def takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_pop
     nagetive_samples_pop_range_dict[BEHAVIOR_TYPE_BUY] = dict()
 
     no_user_opted_item = 0
-    print("         %s calculating posbility range of nagetive records according to item popularity..." % getCurrentTime())
+    print("                 %s calculating posbility range of nagetive records according to item popularity..." % getCurrentTime())
     nagetive_records_cnt = len(candidates_in_test_set)
     index = 0
     for user_item in candidates_in_test_set:
@@ -171,12 +171,12 @@ def takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_pop
             pop_range_start_dict[behavior_index] = pop_range_end_dict[behavior_index]
         index += 1
         if (index % 10000 == 0):
-            print("        %d / %d nagetive records calculated\r" % (index, nagetive_records_cnt), end="")
+            print("                %d / %d nagetive records calculated\r" % (index, nagetive_records_cnt), end="")
     
     for behavior_type in total_popularity_dict:
         total_popularity_dict[behavior_type] =  int(total_popularity_dict[behavior_type] * 10**5)
 
-    print("         %s no user operated item count %d" % (getCurrentTime(), no_user_opted_item))
+    print("                 %s no user operated item count %d" % (getCurrentTime(), no_user_opted_item))
     logging.info("total popularity %s" % (total_popularity_dict))
     logging.info("nagetive_samples_pop_range[BEHAVIOR_TYPE_BUY] %s" % nagetive_samples_pop_range_dict[4])
 
@@ -193,7 +193,7 @@ def takingNagetiveSamples(checking_date, positive_samples, nag_per_pos, item_pop
     nagetive_samples = set()
 
     nagetive_records_cnt = len(positive_samples) * nag_per_pos
-    print("         %s taking nagetive samples according to item popularity, %d are going to take..." %\
+    print("                %s taking nagetive samples according to item popularity, %d are going to take..." %\
           (getCurrentTime(), nagetive_records_cnt))
 
     while (len(nagetive_samples) <= nagetive_records_cnt):
@@ -283,8 +283,8 @@ def takingNagetiveSamples2(window_start_date, window_end_date, positive_samples,
     sorted_pop_ranges = list(popularity_range_dict.keys())
     sorted_pop_ranges.sort()
 
-    print("        %s total popularity %d" % (getCurrentTime(), total_popularity))
-    print("        %s taking nagetive samples..." % getCurrentTime())
+    print("                %s total popularity %d" % (getCurrentTime(), total_popularity))
+    print("                %s taking nagetive samples..." % getCurrentTime())
     nagetive_sample_cnt = len(positive_samples) * nag_per_pos
     for index in range(nagetive_sample_cnt):
         # 在 total popularity 范围内取随机值
@@ -292,7 +292,7 @@ def takingNagetiveSamples2(window_start_date, window_end_date, positive_samples,
         pop_range_index = takeNagetiveSampleByPopularity(sorted_pop_ranges, rand_pop)
         pop_range = sorted_pop_ranges[pop_range_index]
         nagetive_samples.add(popularity_range_dict[pop_range])
-        print("        %d / %d nagetive samples taken\r" % (index, nagetive_sample_cnt), end="")
+        print("                %d / %d nagetive samples taken\r" % (index, nagetive_sample_cnt), end="")
 
     return nagetive_samples
 
