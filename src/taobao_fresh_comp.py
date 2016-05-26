@@ -256,6 +256,7 @@ for feature_idx in useful_features:
             g_useful_feature_info[feature_name] = feature_idx
             break
 
+logging.info("useful features are %s" % g_useful_feature_info)
 logging.info("After split window, features_importance is " % features_importance)    
 
 print("=====================================================================")
@@ -298,3 +299,11 @@ clf.fit(Xmat, Ymat)
 X_leaves = clf.apply(Xmat)
 
 samples_test = takingSamplesForTesting(forecast_date)
+
+logisticReg = LogisticRegression()
+
+logisticReg.fit(X_leaves, samples_test)
+
+predicted_prob = logisticReg.predict_proba(X_leaves)
+min_proba = 0.5
+verifyPrediction(forecast_date, samples_test, predicted_prob, min_proba)
