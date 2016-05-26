@@ -30,20 +30,24 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     ##################################################################################################
 
     # 在 [begin_date, checking_date) 期间， 各个 behavior 在 item 上的总次数, 返回 4 个特征
-    Xmat[:, feature_cnt : feature_cnt+4], feature_cnt = feature_beahvior_cnt_on_item(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_beahvior_cnt_on_item(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     # item 第一次behavior 距离checking date 的天数, 返回 4 个特征
     print("        %s days from first behavior..." % getCurrentTime())
-    Xmat[:, feature_cnt : feature_cnt+4], feature_cnt = feature_days_from_1st_behavior(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_days_from_1st_behavior(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     # item 最后一次behavior 距离checking date 的天数, 返回 4 个特征
     print("        %s days from last behavior..." % getCurrentTime())
-    Xmat[:, feature_cnt : feature_cnt+4], feature_cnt = feature_days_from_last_behavior(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_days_from_last_behavior(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     print("        %s getting item popularity..." % getCurrentTime())
     # 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品总用户数
     #Xmat[:, feature_cnt] = feature_item_popularity(BEHAVIOR_TYPE_BUY, item_popularity_dict, samples); feature_cnt += 1
-    Xmat[:, feature_cnt], feature_cnt = feature_item_popularity2(item_popularity_dict, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_item_popularity2(item_popularity_dict, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     ##################################################################################################
     #######################################用户 - 商品交互属性##########################################
@@ -51,44 +55,53 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     #用户在 checking date 的前 1 天是否对 item id 有过 favorite
     verify_date = window_end_date - datetime.timedelta(1)
     print("        %s calculating %s FAV ..." % (getCurrentTime(), verify_date))
-    Xmat[:, feature_cnt], feature_cnt = feature_behavior_on_date(BEHAVIOR_TYPE_FAV, verify_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_behavior_on_date(BEHAVIOR_TYPE_FAV, verify_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     #用户在 checking date 的前 1 天是否有过 cart
     print("        %s calculating %s CART ..." % (getCurrentTime(), verify_date))
-    Xmat[:, feature_cnt], feature_cnt = feature_behavior_on_date(BEHAVIOR_TYPE_CART, verify_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_behavior_on_date(BEHAVIOR_TYPE_CART, verify_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     # 在 [windw_start_date, window_end_dat) 范围内， 
     # 用户checking_date（不包括）之前 n 天购买（浏览， 收藏， 购物车）该商品的次数/该用户购买（浏览， 收藏， 购物车）所有商品的总数量
     for pre_days in [days_in_windows, round(days_in_windows/2), round(days_in_windows/3)]:
         print("        %s get behavior in last %d days" % (getCurrentTime(), pre_days))
-        Xmat[:, feature_cnt : feature_cnt+4], feature_cnt = feature_user_item_behavior_ratio(window_end_date, pre_days, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+        feature_mat, feature_cnt = feature_user_item_behavior_ratio(window_end_date, pre_days, samples, during_training, total_feature_cnt)
+        total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     #在 [windw_start_date, window_end_dat) 范围内， 用户第一次购买 item 前， 在 item 上的的各个 behavior 的数量, 3个特征
     print("        %s behavior count before first buy..." % (getCurrentTime()))
-    Xmat[:, feature_cnt : feature_cnt+3], feature_cnt = feature_behavior_cnt_before_1st_buy(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_behavior_cnt_before_1st_buy(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     #在 [windw_start_date, window_end_dat) 范围内，  用户最后一次操作 item 至 checking_date(包括）) 的天数，
     print("        %s days of last behavior" % (getCurrentTime()))
-    Xmat[:, feature_cnt : feature_cnt+4], feature_cnt = feature_last_opt_item(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_last_opt_item(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     ##################################################################################################
     ###################################### 用户 - category交互属性  ###################################
     ##################################################################################################
     #在 [windw_start_date, window_end_dat) 范围内， ， 用户在category 上的购买浏览转化率 购买过的category数量/浏览过的category数量
     print("        %s calculating user-item b/v ratio..." % getCurrentTime())
-    Xmat[:, feature_cnt], feature_cnt = feature_buy_view_ratio(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_buy_view_ratio(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     #在 [windw_start_date, window_end_dat) 范围内， 用户最后一次操作同类型的商品至 checking_date 的天数
     print("        %s days of last behavior of category... " % getCurrentTime())
-    Xmat[:, feature_cnt : feature_cnt+4], feature_cnt = feature_last_opt_category(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_last_opt_category(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     # 在 [windw_start_date, window_end_dat) 范围内， ， 用户一共购买过多少同类型的商品
     print("        %s how many category did user buy... " % getCurrentTime())
-    Xmat[:, feature_cnt], feature_cnt = feature_how_many_buy_category(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_how_many_buy_category(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     #在 [windw_start_date, window_end_dat) 范围内， user 对 category 购买间隔的平均天数以及方差
     print("        %s mean and variance days that user buy category" % (getCurrentTime()))
-    Xmat[:, feature_cnt : feature_cnt+2], feature_cnt = feature_mean_days_between_buy_user_category(window_start_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+    feature_mat, feature_cnt = feature_mean_days_between_buy_user_category(window_start_date, window_end_date, samples, during_training, total_feature_cnt)
+    total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     ##################################################################################################
     #######################################   用户属性   ##############################################
@@ -97,7 +110,8 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     for last_days in [days_in_windows, round(days_in_windows/2), round(days_in_windows/3)]:
         print("        %s user's behavior count in last %d days" % (getCurrentTime(), last_days))
         begin_date = window_end_date - datetime.timedelta(last_days)
-        Xmat[:, feature_cnt:feature_cnt+7], feature_cnt = feature_how_many_behavior_user(begin_date, window_end_date, samples, during_training, total_feature_cnt); total_feature_cnt += feature_cnt
+        feature_mat, feature_cnt = feature_how_many_behavior_user(begin_date, window_end_date, samples, during_training, total_feature_cnt)
+        total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
 
     ##################################################################################################
     #######################################    feature end  ##########################################

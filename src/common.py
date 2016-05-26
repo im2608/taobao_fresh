@@ -750,3 +750,9 @@ def removeBuyCausedByDouble12():
 
     logging.info("total %d buy records deleted caused by 12-12" % removed_records)
     return     
+
+def addSubFeatureMatIntoFeatureMat(sub_feature_mat, sub_feature_cnt, feature_mat, cur_total_feature_cnt):
+    if (sub_feature_cnt > 0):
+        feature_mat[:, cur_total_feature_cnt + sub_feature_cnt] = sub_feature_mat
+
+    return sub_feature_cnt
