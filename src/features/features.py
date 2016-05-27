@@ -25,9 +25,10 @@ def get_behavior_by_date(user_records, behavior_type, checking_date, user_item_p
 
 #检查user 是否在 checking_date 这一天对 item 有过 behavior type
 def feature_behavior_on_date(behavior_type, checking_date, user_item_pairs, during_training, cur_total_feature_cnt):    
-    feature_name = "feature_behavior_on_date"
+    feature_name = "feature_behavior_on_date_%d" % behavior_type
 
     if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("%s has no useful features" % feature_name)
         return None, 0
 
     returned_feature_cnt = 1
@@ -62,6 +63,7 @@ def feature_buy_view_ratio(window_start_date, window_end_date, user_item_pairs, 
     feature_name = "feature_buy_view_ratio"
 
     if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("%s has no useful features" % feature_name)
         return None, 0
 
     buy_view_ratio_dict = dict()
@@ -147,16 +149,20 @@ def userBehaviorCntOnItemBeforeCheckingDate(user_records, user_id, item_id, chec
 
 # 用户checking_date（不包括）之前 pre_days 天购买（浏览， 收藏， 购物车）该商品的次数/该用户购买（浏览， 收藏， 购物车）所有商品的总数量    
 def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs, during_training, cur_total_feature_cnt):
-    features_names = ["feature_user_item_behavior_ratio_pre_%d_view" % predays,
-                      "feature_user_item_behavior_ratio_pre_%d_fav" % predays,
-                      "feature_user_item_behavior_ratio_pre_%d_cart" % predays,
-                      "feature_user_item_behavior_ratio_pre_%d_buy" % predays]
+    features_names = ["feature_user_item_behavior_ratio_pre_%d_view" % pre_days,
+                      "feature_user_item_behavior_ratio_pre_%d_fav" % pre_days,
+                      "feature_user_item_behavior_ratio_pre_%d_cart" % pre_days,
+                      "feature_user_item_behavior_ratio_pre_%d_buy" % pre_days]
 
     useful_features = None
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_user_item_behavior_ratio_prd_%d] has no useful features" % pre_days)
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_user_item_behavior_ratio_pre_%d] has %d useful features" %
+                         (pre_days, len(useful_features)));
 
     user_item_pop_list = np.zeros((len(user_item_pairs), 4))
     user_behavior_cnt_dict = dict()
@@ -238,7 +244,10 @@ def feature_last_opt_item(window_start_date, window_end_date, user_item_pairs, d
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_last_opt_item] has no useful features")
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_last_opt_item] has %d useful features" % len(useful_features))
 
     days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), 4))
 
@@ -295,7 +304,10 @@ def feature_behavior_cnt_before_1st_buy(window_start_date, window_end_date, user
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_behavior_cnt_before_1st_buy] has no useful features")
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_behavior_cnt_before_1st_buy] has %d useful features" % len(useful_features))
 
     behavior_cnt_before_1st_buy_list = np.zeros((len(user_item_pairs), 3))
 
@@ -338,6 +350,7 @@ def feature_mean_days_between_buy_user_item(window_start_date, window_end_dat, u
     feature_name = "feature_mean_days_between_buy_user_item"
 
     if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("feature_mean_days_between_buy_user_item has no useful features")
         return None, 0
 
     samle_cnt = len(user_item_pairs)

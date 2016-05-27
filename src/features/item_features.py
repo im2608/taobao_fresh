@@ -10,6 +10,7 @@ import numpy as np
 def feature_item_popularity(behavior_type, item_popularity_dict, user_item_pairs, during_training, cur_total_feature_cnt):
     feature_name = "feature_item_popularity"
     if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("%s has no useful features" % feature_name)
         return None, 0
 
     item_popularity_list = np.zeros((len(user_item_pairs), 1))
@@ -32,6 +33,7 @@ def feature_item_popularity(behavior_type, item_popularity_dict, user_item_pairs
 def feature_item_popularity2(item_popularity_dict, user_item_pairs, during_training, cur_total_feature_cnt):
     feature_name = "feature_item_popularity"
     if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("%s has no useful features" % feature_name)
         return None, 0
 
     item_popularity_list = np.zeros((len(user_item_pairs), 1))
@@ -46,7 +48,7 @@ def feature_item_popularity2(item_popularity_dict, user_item_pairs, during_train
     if (during_training):
         g_feature_info[cur_total_feature_cnt] = feature_name
 
-    return item_popularity_list
+    return item_popularity_list, 1
 
 ################################################################################################
 ################################################################################################
@@ -64,7 +66,11 @@ def feature_beahvior_cnt_on_item(begin_date, checking_date, user_item_pairs, dur
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_beahvior_cnt_on_item] has no useful features")
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_beahvior_cnt_on_item] has %d useful features" % len(useful_features))
+
 
     logging.info("feature_beahvior_cnt_on_item(%s, %s)" % (begin_date, checking_date))
     item_behavior_cnt_dict = dict()
@@ -119,7 +125,11 @@ def feature_days_from_1st_behavior(window_start_date, window_end_date, user_item
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_days_from_1st_behavior] has no useful features")
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_days_from_1st_behavior] has %d useful features" % len(useful_features))
+
 
     total_start = time.clock()
     days_from_1st_dict = dict()
@@ -173,15 +183,18 @@ def feature_days_from_1st_behavior(window_start_date, window_end_date, user_item
 
 # item 最后一次behavior 距离 window_end_date 的天数, 返回 4 个特征
 def feature_days_from_last_behavior(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
-    feature_name = ["feature_days_from_last_behavior_view",
-                    "feature_days_from_last_behavior_fav",
-                    "feature_days_from_last_behavior_cart",
-                    "feature_days_from_last_behavior_buy"]
+    features_names = ["feature_days_from_last_behavior_view",
+                      "feature_days_from_last_behavior_fav",
+                      "feature_days_from_last_behavior_cart",
+                      "feature_days_from_last_behavior_buy"]
     useful_features = None
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_days_from_last_behavior] has no useful features")
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_days_from_last_behavior] has %d useful features" % len(useful_features))
 
     days_from_last_dict = dict()
     days_from_last_list = np.zeros((len(user_item_pairs), 4))
@@ -226,6 +239,50 @@ def feature_days_from_last_behavior(window_start_date, window_end_date, user_ite
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     return getUsefulFeatures(during_training, cur_total_feature_cnt, days_from_last_list, features_names, useful_features)
+################################################################################################
+################################################################################################
+################################################################################################
+
+# [begin date, end date) 期间，总共有多少用户购买了该 item
+def feature_how_many_users_bought(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+    feature_name = "feature_how_many_users_bought"
+    if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("%s has no useful features" % feature_name)
+        return None, 0
+
+    how_many_users_bought_dict = dict()
+    how_many_users_bought_list = np.zeros((len(user_item_pairs), 1))
+
+    for index in range(len(user_item_pairs)):
+        user_id = user_item_pairs[index][0]
+        item_id = user_item_pairs[index][1]
+
+        if (item_id in how_many_users_bought_dict):
+            how_many_users_bought_list[index] = how_many_users_bought_dict[item_id]
+            continue
+
+        users_bought_item = dict()
+        if (item_id not in g_user_buy_transection_item):
+            continue
+
+        for user_id, item_buy_records in g_user_buy_transection_item[item_id].items():
+            if (user_id in users_bought_item):
+                continue
+
+            for each_record in item_buy_records:
+                if (each_record[-1][1].date() >= window_start_date and 
+                    each_record[-1][1].date() < window_end_date):
+                    users_bought_item[user_id] = 1 
+                    break
+
+        how_many_users_bought_dict[item_id] = len(users_bought_item)
+        how_many_users_bought_list[index] = len(users_bought_item)
+
+    if (during_training):
+        g_feature_info[cur_total_feature_cnt] = feature_name
+
+    return how_many_users_bought_list, 1    
+
 ################################################################################################
 ################################################################################################
 ################################################################################################

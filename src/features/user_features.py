@@ -9,22 +9,26 @@ import numpy as np
 ####################################################################################################
 
 #在 [begin_date, end_date)时间段内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车的比率
-def feature_how_many_behavior_user(begin_date, end_date, user_item_pairs, during_training, cur_total_feature_cnt):
-    logging.info("entered feature_how_many_behavior(%s, %s)" % (begin_date, end_date))
+def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+    begin_date = end_date - datetime.timedelta(pre_days)
+    logging.info("entered feature_how_many_behavior_user(%s, %s)" % (begin_date, end_date))
 
-    features_names = ["feature_how_many_behavior_user_view", 
-                      "feature_how_many_behavior_user_fav",
-                      "feature_how_many_behavior_user_cart",
-                      "feature_how_many_behavior_user_buy",
-                      "feature_how_many_behavior_user_buy_view_ratio",
-                      "feature_how_many_behavior_user_buy_fav_ratio",
-                      "feature_how_many_behavior_user_buy_cart_ratio"]
+    features_names = ["feature_how_many_behavior_user_view_%d" % pre_days, 
+                      "feature_how_many_behavior_user_fav_%d" % pre_days,
+                      "feature_how_many_behavior_user_cart_%d" % pre_days,
+                      "feature_how_many_behavior_user_buy_%d" % pre_days,
+                      "feature_how_many_behavior_user_buy_view_ratio_%d" % pre_days,
+                      "feature_how_many_behavior_user_buy_fav_ratio_%d" % pre_days,
+                      "feature_how_many_behavior_user_buy_cart_ratio_%d" % pre_days]
 
     useful_features = None
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_how_many_behavior_user] has no useful features")
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_how_many_behavior_user] has %d useful features" % len(useful_features))
 
     features = 7
 
@@ -66,7 +70,7 @@ def feature_how_many_behavior_user(begin_date, end_date, user_item_pairs, during
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    logging.info("leaving feature_how_many_behavior")
+    logging.info("leaving feature_how_many_behavior_user")
     return getUsefulFeatures(during_training, cur_total_feature_cnt, how_many_behavior_list, features_names, useful_features)
 
 
@@ -83,7 +87,10 @@ def feature_mean_days_between_buy_user(checking_date, user_item_pairs, during_tr
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_mean_days_between_buy_user] has no useful features")
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_mean_days_between_buy_user] has %d useful features" % len(useful_features))
 
     mean_days_between_buy_dict = dict()
     mean_days_between_list = np.zeros((len(user_item_pairs), 2))
@@ -127,6 +134,7 @@ def feature_last_buy_user(checking_date, user_item_pairs, during_training, cur_t
 
     feature_name = "feature_last_buy_user"
     if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("%s has no useful features" % feature_name)
         return None, 0
 
     last_buy_dict = dict()

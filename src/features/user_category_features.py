@@ -13,6 +13,7 @@ import numpy as np
 def feature_mean_days_between_buy_user_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
     feature_name = "feature_mean_days_between_buy_user_category"
     if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("%s has no useful features" % feature_name)
         return None, 0
 
     user_category_mean_buy_dict = dict()
@@ -70,7 +71,7 @@ def feature_mean_days_between_buy_user_category(window_start_date, window_end_da
     if (during_training):
         g_feature_info[cur_total_feature_cnt] = feature_name
 
-    return buy_mean_days_list, 1
+    return buy_mean_days_list, 2
 
 ######################################################################################################
 ######################################################################################################
@@ -80,6 +81,7 @@ def feature_mean_days_between_buy_user_category(window_start_date, window_end_da
 def feature_how_many_buy_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
     feature_name = "feature_how_many_buy_category"
     if (not during_training and feature_name not in g_useful_feature_info):
+        logging.info("%s has no useful features" % feature_name)
         return None, 0
 
     how_many_buy = np.zeros((len(user_item_pairs), 1))
@@ -150,7 +152,7 @@ def get_last_opt_category_date(user_records, window_start_date, window_end_date,
 
 # 用户最后一次操作同类型的商品至 window_end_date （不包括） 的天数，返回4个特征
 # todo： 此处有个问题： 如果用户连续购买了同一个item，则此处会有多条相同的购物记录，但是函数中没有处理这种情况
-def feature_last_opt_category(window_start_date, window_end_date, user_item_pairs, during_training):
+def feature_last_opt_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
     features_names = ["feature_last_opt_category_view", 
                       "feature_last_opt_category_fav", 
                       "feature_last_opt_category_cart", 
@@ -159,7 +161,10 @@ def feature_last_opt_category(window_start_date, window_end_date, user_item_pair
     if (not during_training):
         useful_features = featuresForForecasting(features_names)
         if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_last_opt_category] has no useful features")
             return None, 0
+        else:
+            logging.info("During forecasting, [feature_last_opt_category] has %d useful features" % len(useful_features))
 
     days_from_last_opt_cat_dict = dict()
     days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), 4))
@@ -199,4 +204,3 @@ def feature_last_opt_category(window_start_date, window_end_date, user_item_pair
 ######################################################################################################
 ######################################################################################################
 ######################################################################################################
-    

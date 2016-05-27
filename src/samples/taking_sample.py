@@ -25,7 +25,7 @@ def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, it
     return samples, Ymat
 
 def takingPositiveSamples(window_start_date, window_end_date):
-    print("        %s taking positive samples..." % (getCurrentTime()))
+    print("        %s taking positive samples(%s, %s)" % (getCurrentTime(), window_start_date, window_end_date))
     positive_samples = set()
     buy_cnt = len(g_user_buy_transection)
     index = 0
@@ -33,7 +33,7 @@ def takingPositiveSamples(window_start_date, window_end_date):
         for item_id, buy_records in item_buy_records.items():
             for each_record in buy_records:
                 if (each_record[-1][1].date() == window_end_date and 
-                    each_record[0][1].date() >= window_start_date and
+                    #each_record[0][1].date() >= window_start_date and
                     item_id in global_test_item_category):
                     positive_samples.add((user_id, item_id))
         index += 1
@@ -55,7 +55,7 @@ def shouldTakeNagetiveSample(window_start_date, window_end_date, user_id, item_i
     for each_record in g_user_behavior_patten[user_id][item_id]:
         for behavior_consecutive in each_record:
             if (behavior_consecutive[1].date() < window_end_date and
-                behavior_consecutive[1].date() >= window_start_date and
+                #behavior_consecutive[1].date() >= window_start_date and
                 behavior_consecutive[0] != BEHAVIOR_TYPE_VIEW):
                 return True
 
@@ -296,20 +296,80 @@ def takingNagetiveSamples2(window_start_date, window_end_date, positive_samples,
 
     return nagetive_samples
 
-def takingSamplesForTesting(checking_date):
+def takingSamplesForForecasting(window_start_date, forecasting_date):
     samples_for_testing = dict()
     for user_id, item_buy_records in g_user_buy_transection.items():
-        for item_id in item_buy_records:
+        for item_id, buy_records in item_buy_records.items():
             if (item_id not in global_test_item_category):
                 continue
-
-            samples_for_testing[(user_id, item_id)] = 1
+            for each_record in buy_records:
+                if (each_record[-1][1].date() == forecasting_date):
+                    samples_for_testing[(user_id, item_id)] = 1
 
     #从测试集中取样与在训练集中采样负样本的逻辑相同
     for user_id, item_pattern_records in g_user_behavior_patten.items():
         for item_id in item_pattern_records:
-            if (shouldTakeNagetiveSample(checking_date, user_id, item_id)):
+            if (shouldTakeNagetiveSample(window_start_date, forecasting_date, user_id, item_id)):
                 samples_for_testing[(user_id, item_id)] = 1
 
-    print("%s taking %d sample from testing set" % (getCurrentTime(), len(samples_for_testing)))
+    print("        %s taking %d sample from testing set" % (getCurrentTime(), len(samples_for_testing)))
     return list(samples_for_testing.keys())
+
+
+
+
+
+def verifyPrediction(forecast_date, samples_test, predicted_prob, min_proba):
+    predicted_user_item = []
+    for index in range(len(predicted_prob)):
+        if (predicted_prob[index][1] >= min_proba):
+            predicted_user_item.append(samples_test[index])
+
+    actual_user_item = takingPositiveSamples(forecast_date, forecast_date)
+
+    actual_count = len(actual_user_item)
+    predicted_count = len(predicted_user_item)
+
+    hit_count = 0
+    user_hit_list = set()
+
+    for user_item in predicted_user_item:
+        logging.info("predicted %s , %s" % (user_item[0], user_item[1]))
+        if (user_item in actual_user_item):
+            hit_count += 1
+
+    for user_item in predicted_user_item:
+        for user_item2 in actual_user_item:
+            if (user_item[0] == user_item2[0]):
+                user_hit_list.add(user_item[0])
+
+    if (len(user_hit_list) > 0):
+        logging.info("hit user: %s" % user_hit_list)
+
+    print("hit user: %s" % user_hit_list)
+
+    for user_item in actual_user_item:
+        logging.info("acutal buy %s , %s" % (user_item[0], user_item[1]))
+
+    print("forecasting date %s, positive count %d, predicted count %d, hit count %d" %\
+          (forecast_date, actual_count, predicted_count, hit_count))
+
+    if (predicted_count != 0):
+        p = hit_count / predicted_count
+    else:
+        p = 0
+
+    if (actual_count != 0):
+        r = hit_count / actual_count
+    else:
+        r = 0
+
+    if (p != 0 or r != 0):        
+        f1 = 2 * p * r / (p + r)
+    else:
+        f1 = 0
+
+    print("precission: %.4f, recall %.4f, F1 %.4f" % (p, r, f1))
+
+    return
+

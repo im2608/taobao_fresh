@@ -150,9 +150,14 @@ sys.path.append("%s\\GBDT\\" % runningPath)
 sys.path.append("%s\\features\\" % runningPath)
 sys.path.append("%s\\samples\\" % runningPath)
 
+
 import LR
 import RF
 import GBDT
+from taking_sample import *
+from sklearn.utils import shuffle
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import GradientBoostingRegressor
 
 file_idx = 53
 data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
@@ -233,7 +238,7 @@ print("=========================  training...   ============================")
 print("=====================================================================")
 
 start_from = 0
-user_cnt = 200
+user_cnt = 1000
 window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
 window_end_date = datetime.datetime.strptime("2014-11-27", "%Y-%m-%d").date()
 final_end_date = datetime.datetime.strptime("2014-12-01", "%Y-%m-%d").date()
@@ -247,44 +252,44 @@ while (window_end_date <= final_end_date):
         features_importance += GBDT.GBDT_slideWindows(window_start_date, window_end_date, True)
 
     window_end_date += datetime.timedelta(1)
-    window_start_date += datetime.timedelta(1)    
+    window_start_date += datetime.timedelta(1)
 
-useful_features = features_importance[features_importance > 0.0]
-for feature_idx in useful_features:
-    for feature_name in g_feature_info:
-        if (g_feature_info[feature_name] == feature_idx):
-            g_useful_feature_info[feature_name] = feature_idx
-            break
-
-logging.info("useful features are %s" % g_useful_feature_info)
 logging.info("After split window, features_importance is " % features_importance)    
 
-print("=====================================================================")
-print("=========================  forecasting...============================")
-print("=====================================================================")
+for idx, importance in enumerate(features_importance):
+    if (importance == 0):
+        continue
+    for feature_name in g_feature_info:
+        if (g_feature_info[feature_name] == idx):
+            g_useful_feature_info[feature_name] = idx
+            break
 
-window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
-window_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
-forecast_date = datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
+logging.info("useful features (%d) are %s" % (len(g_useful_feature_info), g_useful_feature_info))
+
+
 nag_per_pos = 10
 
-print("        %s checking date %s" % (getCurrentTime(), checking_date))
 
-# #item 的热度
+print("=====================================================================")
+print("==============  generating weights %s - %s ==========" % (window_start_date, window_end_date))
+print("=====================================================================")
+
+
+# item 的热度
 print("        %s calculating popularity..." % getCurrentTime())
 #item_popularity_dict = calculate_item_popularity()
 item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
 print("        %s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
 
-samples, Ymat = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
+samples_weight, Ymat_weight = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
+print(" ++++++++++ samples_weight (%d)" % (len(samples_weight)))
 
-print("        %s taking samples for forecasting (%s, %d)" % (getCurrentTime(), window_end_date, nag_per_pos))
-samples, Ymat = takingSamplesForTesting(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
-print("        %s samples count %d, Ymat count %d" % (getCurrentTime(), len(samples), len(Ymat)))
+print("%s forecasting, reading feature matrix from %s -- %s" % (getCurrentTime(), window_start_date, window_end_date))
+Xmat_weight = GBDT.createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples_weight, item_popularity_dict, False)
+m, n = np.shape(Xmat_weight)
+print("%s matrix for generating weights (%d, %d)" % (getCurrentTime(), m, n))
 
-Xmat = createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, item_popularity_dict, False)
-
-Xmat, Ymat = shuffle(Xmat, Ymat, random_state=13)
+Xmat_weight, Ymat_weight = shuffle(Xmat_weight, Ymat_weight, random_state=13)
 
 params = {'n_estimators': 100, 
           'max_depth': 4,
@@ -293,17 +298,35 @@ params = {'n_estimators': 100,
           'loss': 'ls'
           }
 
+
 clf = GradientBoostingRegressor(**params)
-clf.fit(Xmat, Ymat)
+clf.fit(Xmat_weight, Ymat_weight)
 
-X_leaves = clf.apply(Xmat)
 
-samples_test = takingSamplesForTesting(forecast_date)
+X_leaves_weight = clf.apply(Xmat_weight)
 
 logisticReg = LogisticRegression()
 
-logisticReg.fit(X_leaves, samples_test)
+logisticReg.fit(X_leaves_weight, Ymat_weight)
 
-predicted_prob = logisticReg.predict_proba(X_leaves)
+forecast_date = window_end_date + datetime.timedelta(1)
+print("=====================================================================")
+print("==============forecasting %s  ==============================" % forecast_date)
+print("=====================================================================")
+
+window_start_date = forecast_date - datetime.timedelta(9)
+
+samples_forecast = takingSamplesForForecasting(window_start_date, forecast_date)
+
+logging.info("createing feature matrix for forecasting %s -- %s " % (window_start_date, forecast_date))
+Xmat_forecast = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, samples_forecast, item_popularity_dict, False)
+
+m, n = np.shape(Xmat_forecast)
+ms, ns = np.shape(samples_forecast)
+print("%s forecasting feature matrix (%d, %d), sample forecasting (%d, %d) " % (getCurrentTime(), m, n, ms, ns))
+
+X_leaves_forecast = clf.apply(Xmat_forecast)
+
+predicted_prob = logisticReg.predict_proba(X_leaves_forecast)
 min_proba = 0.5
-verifyPrediction(forecast_date, samples_test, predicted_prob, min_proba)
+verifyPrediction(forecast_date, samples_forecast, predicted_prob, min_proba)

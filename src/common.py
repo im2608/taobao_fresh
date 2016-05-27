@@ -1,4 +1,12 @@
 import sys
+
+runningPath = sys.path[0]
+sys.path.append("%s\\LR-hit\\" % runningPath)
+sys.path.append("%s\\RF\\" % runningPath)
+sys.path.append("%s\\GBDT\\" % runningPath)
+sys.path.append("%s\\features\\" % runningPath)
+sys.path.append("%s\\samples\\" % runningPath)
+
 import csv
 import time
 import datetime
@@ -20,7 +28,7 @@ BEHAVIOR_TYPE_FAV  = 2
 BEHAVIOR_TYPE_CART = 3
 BEHAVIOR_TYPE_BUY  = 4
 
-runningPath = sys.path[0]
+
 tianchi_fresh_comp_train_user = "%s\\..\\input\\tianchi_fresh_comp_train_user.csv" % runningPath
 tianchi_fresh_comp_train_item = "%s\\..\\input\\tianchi_fresh_comp_train_item.csv" % runningPath
 
@@ -64,12 +72,14 @@ logging.basicConfig(level=logging.INFO,\
                     filename='..\\log\\log.%s.txt' % algo,\
                     filemode='w')
 
-# 判断子特征矩阵的所有特征有哪些是有效的
+# 判断子特征矩阵中的特征有哪些是有效的
 def featuresForForecasting(features_names):
     useful_features = []
-    for i, name in features_names:
+    for i, name in enumerate(features_names):
         if (name in g_useful_feature_info):
             useful_features.append(i)
+            logging.info("feature (%d, %s) is usefull" % (i, name))
+            # del(g_useful_feature_info[name])
 
     return useful_features
 
@@ -82,9 +92,7 @@ def getUsefulFeatures(during_training, cur_total_feature_cnt, feature_mat, featu
         return feature_mat, len(features_names)
     else:
         # 不是在训练过程中（在预测过程中）， useful_features 指明了子特征矩阵中的哪些特征是有效的，只返回那些有效的子特征        
-        feature_mat_useful  = np.zeros(np.shape(feature_mat)[0], len(useful_features))
-        feature_mat_useful[:, useful_features] = feature_mat[:, useful_features]
-        return feature_mat_useful, len(useful_features)
+        return feature_mat[:, useful_features], len(useful_features)
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
@@ -509,7 +517,8 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
 
                 item_buy_record = user_whole_info[bytes(item_id.encode())].decode()
                 g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
-                g_user_buy_transection_item[item_id][user_id] = g_user_buy_transection[user_id][item_id]                
+                logging.info(" user %s buy %s: %s" % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
+                g_user_buy_transection_item[item_id][user_id] = g_user_buy_transection[user_id][item_id]
                 g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])
         else:
             user_index += 1
@@ -627,8 +636,8 @@ def calculateItemPopularity(window_start_date, window_end_date):
         popularity = behavior_cnt[0]*0.01 + behavior_cnt[1]*0.33 + behavior_cnt[2]*0.47 + behavior_cnt[3]*0.94
         item_popularity_dict[item_id] = popularity
 
-        logging.info("%s to %s, %s popularity %s ==> %.1f" % 
-                    (window_start_date, window_end_date, item_id, behavior_cnt, popularity))
+        # logging.info("%s to %s, %s popularity %s ==> %.1f" % 
+        #             (window_start_date, window_end_date, item_id, behavior_cnt, popularity))
 
         index += 1
         if (index % 1000 == 0):
@@ -644,62 +653,6 @@ def loggingProbility(predicted_prob):
         if (predicted_prob[i][1] > predicted_prob[i][0]):
             logging.info("%.4f, %.4f" % (predicted_prob[i][0], predicted_prob[i][1]))
     return 
-
-
-
-def verifyPrediction(forecast_date, samples_test, predicted_prob, min_proba):
-    predicted_user_item = []
-    for index in range(len(predicted_prob)):
-        if (predicted_prob[index][1] >= min_proba):
-            predicted_user_item.append(samples_test[index])
-
-    actual_user_item = takingPositiveSamples(forecast_date)
-
-    actual_count = len(actual_user_item)
-    predicted_count = len(predicted_user_item)
-
-    hit_count = 0
-    user_hit_list = set()
-
-    for user_item in predicted_user_item:
-        logging.info("predicted %s , %s" % (user_item[0], user_item[1]))
-        if (user_item in actual_user_item):
-            hit_count += 1
-
-    for user_item in predicted_user_item:
-        for user_item2 in actual_user_item:
-            if (user_item[0] == user_item2[0]):
-                user_hit_list.add(user_item[0])
-
-    if (len(user_hit_list) > 0):
-        logging.info("hit user: %s" % user_hit_list)
-
-    print("hit user: %s" % user_hit_list)
-
-    for user_item in actual_user_item:
-        logging.info("acutal buy %s , %s" % (user_item[0], user_item[1]))
-
-    print("forecasting date %s, positive count %d, predicted count %d, hit count %d" %\
-          (forecast_date, actual_count, predicted_count, hit_count))
-
-    if (predicted_count != 0):
-        p = hit_count / predicted_count
-    else:
-        p = 0
-
-    if (actual_count != 0):
-        r = hit_count / actual_count
-    else:
-        r = 0
-
-    if (p != 0 or r != 0):        
-        f1 = 2 * p * r / (p + r)
-    else:
-        f1 = 0
-
-    print("precission: %.4f, recall %.4f, F1 %.4f" % (p, r, f1))
-
-    return
 
 
 
@@ -753,6 +706,6 @@ def removeBuyCausedByDouble12():
 
 def addSubFeatureMatIntoFeatureMat(sub_feature_mat, sub_feature_cnt, feature_mat, cur_total_feature_cnt):
     if (sub_feature_cnt > 0):
-        feature_mat[:, cur_total_feature_cnt + sub_feature_cnt] = sub_feature_mat
+        feature_mat[:, cur_total_feature_cnt : cur_total_feature_cnt+sub_feature_cnt] = sub_feature_mat
 
     return sub_feature_cnt
