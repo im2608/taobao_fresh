@@ -517,7 +517,7 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
 
                 item_buy_record = user_whole_info[bytes(item_id.encode())].decode()
                 g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
-                logging.info(" user %s buy %s: %s" % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
+                #logging.info(" user %s buy %s: %s" % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
                 g_user_buy_transection_item[item_id][user_id] = g_user_buy_transection[user_id][item_id]
                 g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])
         else:

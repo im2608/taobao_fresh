@@ -24,7 +24,7 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
 
     total_feature_cnt = 0
 
-    days_in_windows = (window_end_date - window_start_date).days
+    days_in_window = (window_end_date - window_start_date).days
 
     ##################################################################################################
     #######################################商品属性####################################################
@@ -66,7 +66,7 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
 
     # 在 [window_start_date, window_end_dat) 范围内， 
     # 用户checking_date（不包括）之前 n 天购买（浏览， 收藏， 购物车）该商品的次数/该用户购买（浏览， 收藏， 购物车）所有商品的总数量
-    for pre_days in [days_in_windows, round(days_in_windows/2), round(days_in_windows/3)]:
+    for pre_days in [days_in_window, round(days_in_window/2), round(days_in_window/3)]:
         print("        %s get behavior in last %d days" % (getCurrentTime(), pre_days))
         feature_mat, feature_cnt = feature_user_item_behavior_ratio(window_end_date, pre_days, samples, during_training, total_feature_cnt)
         total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
@@ -108,7 +108,7 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     #######################################   用户属性   ##############################################
     ##################################################################################################
     #在 [begin_date, end_date)时间段内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车的比率
-    for pre_days in [days_in_windows, round(days_in_windows/2), round(days_in_windows/3)]:
+    for pre_days in [days_in_window, round(days_in_window/2), round(days_in_window/3)]:
         print("        %s user's behavior count in last %d days" % (getCurrentTime(), pre_days))
         feature_mat, feature_cnt = feature_how_many_behavior_user(pre_days, window_end_date, samples, during_training, total_feature_cnt)
         total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)

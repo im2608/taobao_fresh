@@ -176,8 +176,22 @@ def feature_last_buy_user(checking_date, user_item_pairs, during_training, cur_t
 
 #截止到checking_date（不包括）， 用户有多少天进行了各种类型的操作
 # 返回 4 个特征
-def feature_how_many_days_for_behavior(checking_date, user_item_pairs, during_training):    
-    logging.info("feature_how_many_days_for_behavior %s" % checking_date)
+def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_item_pairs, during_training):    
+    logging.info("feature_how_many_days_for_behavior %s -- %s" % (window_start_date, window_end_date))
+
+    features_names = ["feature_how_many_days_for_behavior_view", 
+                      "feature_how_many_days_for_behavior_fav", 
+                      "feature_how_many_days_for_behavior_cart", 
+                      "feature_how_many_days_for_behavior_buy"]
+
+    useful_features = None
+    if (not during_training):
+        useful_features = featuresForForecasting(features_names)
+        if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_how_many_days_for_behavior] has no useful features")
+            return None, 0
+        else:
+            logging.info("During forecasting, [feature_how_many_days_for_behavior] has %d useful features" % len(useful_features))
 
     hwo_many_days_for_behavior_dict = dict()
     hwo_many_days_for_behavior_list = np.zeros((len(user_item_pairs), 4))
@@ -198,7 +212,8 @@ def feature_how_many_days_for_behavior(checking_date, user_item_pairs, during_tr
         for item_id, item_buy_records in g_user_buy_transection[user_id].items():
             for each_record in item_buy_records:
                 for each_behavior in each_record:
-                    if (each_behavior[1].date() < checking_date):
+                    if (each_behavior[1].date() >= window_start_date and
+                        each_behavior[1].date() < window_end_date):
                         days_for_behavior_dict[each_behavior[0]].add(each_behavior[1].date())
 
         if (user_id in g_user_behavior_patten):

@@ -2,6 +2,7 @@ from common import *
 import userCF
 import itemCF
 import apriori
+import os
 
 def splitHistoryData(fileName, splited_files):
     print(" reading data file ", fileName)
@@ -144,12 +145,6 @@ def loadTestingFeaturesFromRedis():
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
-sys.path.append("%s\\LR-hit\\" % runningPath)
-sys.path.append("%s\\RF\\" % runningPath)
-sys.path.append("%s\\GBDT\\" % runningPath)
-sys.path.append("%s\\features\\" % runningPath)
-sys.path.append("%s\\samples\\" % runningPath)
-
 
 import LR
 import RF
@@ -237,14 +232,18 @@ print("=====================================================================")
 print("=========================  training...   ============================")
 print("=====================================================================")
 
-start_from = 0
-user_cnt = 1000
+start_from = 300
+user_cnt = 0
+slide_windows_days = 10
+
 window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
-window_end_date = datetime.datetime.strptime("2014-11-27", "%Y-%m-%d").date()
-final_end_date = datetime.datetime.strptime("2014-12-01", "%Y-%m-%d").date()
+window_end_date = window_start_date + datetime.timedelta(slide_windows_days)
+
+final_end_date = datetime.datetime.strptime("2014-12-17", "%Y-%m-%d").date()
 features_importance = None
 loadRecordsFromRedis(start_from, user_cnt)
 
+#滑动窗口 11-18 -- 12-17 得到特征的重要性
 while (window_end_date <= final_end_date):    
     if (features_importance is None):
         features_importance = GBDT.GBDT_slideWindows(window_start_date, window_end_date, True)
@@ -254,7 +253,7 @@ while (window_end_date <= final_end_date):
     window_end_date += datetime.timedelta(1)
     window_start_date += datetime.timedelta(1)
 
-logging.info("After split window, features_importance is " % features_importance)    
+logging.info("After split window, features_importance is %s" % features_importance)    
 
 for idx, importance in enumerate(features_importance):
     if (importance == 0):
@@ -269,7 +268,8 @@ logging.info("useful features (%d) are %s" % (len(g_useful_feature_info), g_usef
 
 nag_per_pos = 10
 
-
+# 从12-07 -- 12-16 根据滑动窗口的结果，使用重要性 > 0 的特征从 12-08 -- 12-16 生成特征矩阵以及12-17 的购买记录进行训练
+# GBDT 生成的叶节点传给 LR 再进行训练， 最后使用 LR 从 12-09 -- 12-18 生成特征矩阵进行预测
 print("=====================================================================")
 print("==============  generating weights %s - %s ==========" % (window_start_date, window_end_date))
 print("=====================================================================")
@@ -284,6 +284,7 @@ print("        %s item popularity len is %d" % (getCurrentTime(), len(item_popul
 samples_weight, Ymat_weight = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
 print(" ++++++++++ samples_weight (%d)" % (len(samples_weight)))
 
+# 使用重要性 > 0 的特征从 12-08 -- 12-16 生成特征矩阵
 print("%s forecasting, reading feature matrix from %s -- %s" % (getCurrentTime(), window_start_date, window_end_date))
 Xmat_weight = GBDT.createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples_weight, item_popularity_dict, False)
 m, n = np.shape(Xmat_weight)
@@ -298,7 +299,7 @@ params = {'n_estimators': 100,
           'loss': 'ls'
           }
 
-
+# 使用GBDT 算法
 clf = GradientBoostingRegressor(**params)
 clf.fit(Xmat_weight, Ymat_weight)
 
@@ -307,6 +308,7 @@ X_leaves_weight = clf.apply(Xmat_weight)
 
 logisticReg = LogisticRegression()
 
+# 将GBDT 的叶节点传给 LR 再进行训练
 logisticReg.fit(X_leaves_weight, Ymat_weight)
 
 forecast_date = window_end_date + datetime.timedelta(1)
@@ -314,7 +316,7 @@ print("=====================================================================")
 print("==============forecasting %s  ==============================" % forecast_date)
 print("=====================================================================")
 
-window_start_date = forecast_date - datetime.timedelta(9)
+window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
 
 samples_forecast = takingSamplesForForecasting(window_start_date, forecast_date)
 
@@ -329,4 +331,22 @@ X_leaves_forecast = clf.apply(Xmat_forecast)
 
 predicted_prob = logisticReg.predict_proba(X_leaves_forecast)
 min_proba = 0.5
-verifyPrediction(forecast_date, samples_forecast, predicted_prob, min_proba)
+
+if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()):
+    file_idx = 0
+    output_file_name = "%s\\..\\output\\forecast.GBDT.LR.%s.%d.csv" % (runningPath, datetime.date.today(), file_idx)
+    while (os.path.exists(output_file_name)):
+        file_idx += 1
+        output_file_name = "%s\\..\\output\\forecast.GBDT.LR.%s.%d.csv" % (runningPath, datetime.date.today(), file_idx)
+
+    print("        %s outputting %s" % (getCurrentTime(), output_file_name))
+    outputFile = open(output_file_name, encoding="utf-8", mode='w')
+    outputFile.write("user_id,item_id\n")
+    for index in range(len(predicted_prob)):
+        if (predicted_prob[index][1] >= min_proba):
+            outputFile.write("%s,%s\n" % (samples_forecast[index][0], samples_forecast[index][1]))
+
+    outputFile.close()
+
+else:
+    verifyPrediction(forecast_date, samples_forecast, predicted_prob, min_proba)
