@@ -1,5 +1,7 @@
 from common import *
 import random
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error
 
 # positive_samples_cnt_per_user 每个用户取得正样本的数量
 # nag_per_pos 正负样本比例，一个正样本对应 nag_per_pos 个负样本
@@ -12,7 +14,7 @@ def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, it
     index = 0
     total_positive = 0
     totoal_nagetive = 0
-    positive_samples = takingPositiveSamples(window_start_date, window_end_date)
+    positive_samples = takingPositiveSamples(window_end_date)
     for user_item in positive_samples:
         samples.append(user_item)
         Ymat.append(1)
@@ -24,15 +26,15 @@ def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, it
 
     return samples, Ymat
 
-def takingPositiveSamples(window_start_date, window_end_date):
-    print("        %s taking positive samples(%s, %s)" % (getCurrentTime(), window_start_date, window_end_date))
+def takingPositiveSamples(buying_date):
+    print("        %s taking positive samples(%s)" % (getCurrentTime(), buying_date))
     positive_samples = set()
     buy_cnt = len(g_user_buy_transection)
     index = 0
     for user_id, item_buy_records in g_user_buy_transection.items():
         for item_id, buy_records in item_buy_records.items():
             for each_record in buy_records:
-                if (each_record[-1][1].date() == window_end_date and 
+                if (each_record[-1][1].date() == buying_date and 
                     #each_record[0][1].date() >= window_start_date and
                     item_id in global_test_item_category):
                     positive_samples.add((user_id, item_id))
@@ -319,57 +321,36 @@ def takingSamplesForForecasting(window_start_date, forecasting_date):
 
 
 
-def verifyPrediction(forecast_date, samples_test, predicted_prob, min_proba):
-    predicted_user_item = []
-    for index in range(len(predicted_prob)):
-        if (predicted_prob[index][1] >= min_proba):
-            predicted_user_item.append(samples_test[index])
+def plotDeviance(window_start_date, window_end_date, nag_per_pos, params, clf):
+    window_start_date = window_start_date + datetime.timedelta(1)
+    window_end_date = window_end_date + datetime.timedelta(1)
+    item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
+    X_test, Y_test = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
+    mse = mean_squared_error(Y_test, clf.predict(X_test))
+    print("        %s MSE: %.4f" % (getCurrentTime(), mse))
+    test_score = np.zeros((params['n_estimators'],), dtype=np.float64)
 
-    actual_user_item = takingPositiveSamples(forecast_date, forecast_date)
+    for i, y_pred in enumerate(clf.staged_predict(X_test)):
+        test_score[i] = clf.loss_(y_test, y_pred)
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
+    plt.title('Deviance')
+    plt.plot(np.arange(params['n_estimators']) + 1, clf.train_score_, 'b-',
+             label='Training Set Deviance')
+    plt.plot(np.arange(params['n_estimators']) + 1, test_score, 'r-',
+             label='Test Set Deviance')
+    plt.legend(loc='upper right')
+    plt.xlabel('Boosting Iterations')
+    plt.ylabel('Deviance')
 
-    actual_count = len(actual_user_item)
-    predicted_count = len(predicted_user_item)
-
-    hit_count = 0
-    user_hit_list = set()
-
-    for user_item in predicted_user_item:
-        logging.info("predicted %s , %s" % (user_item[0], user_item[1]))
-        if (user_item in actual_user_item):
-            hit_count += 1
-
-    for user_item in predicted_user_item:
-        for user_item2 in actual_user_item:
-            if (user_item[0] == user_item2[0]):
-                user_hit_list.add(user_item[0])
-
-    if (len(user_hit_list) > 0):
-        logging.info("hit user: %s" % user_hit_list)
-
-    print("hit user: %s" % user_hit_list)
-
-    for user_item in actual_user_item:
-        logging.info("acutal buy %s , %s" % (user_item[0], user_item[1]))
-
-    print("forecasting date %s, positive count %d, predicted count %d, hit count %d" %\
-          (forecast_date, actual_count, predicted_count, hit_count))
-
-    if (predicted_count != 0):
-        p = hit_count / predicted_count
-    else:
-        p = 0
-
-    if (actual_count != 0):
-        r = hit_count / actual_count
-    else:
-        r = 0
-
-    if (p != 0 or r != 0):        
-        f1 = 2 * p * r / (p + r)
-    else:
-        f1 = 0
-
-    print("precission: %.4f, recall %.4f, F1 %.4f" % (p, r, f1))
-
-    return
-
+    feature_importance = clf.feature_importances_
+    # make importances relative to max importance
+    feature_importance = 100.0 * (feature_importance / feature_importance.max())
+    sorted_idx = np.argsort(feature_importance)
+    pos = np.arange(sorted_idx.shape[0]) + .5
+    plt.subplot(1, 2, 2)
+    plt.barh(pos, feature_importance[sorted_idx], align='center')
+    plt.yticks(pos, boston.feature_names[sorted_idx])
+    plt.xlabel('Relative Importance')
+    plt.title('Variable Importance')
+    plt.show()

@@ -57,14 +57,14 @@ def feature_mean_days_between_buy_user_category(window_start_date, window_end_da
             days_between_buy.append((buy_date[date_index] - buy_date[date_index-1]).days)
 
         mean_vairance = [0, 0]
-        mean_vairance[0] = np.round(np.mean(days_between_buy), 4)
-        mean_vairance[1] = np.round(np.var(days_between_buy), 4)
+        mean_vairance[0] = np.round(np.mean(days_between_buy))
+        mean_vairance[1] = np.round(np.var(days_between_buy))
 
         buy_mean_days_list[index] = mean_vairance
         user_category_mean_buy_dict[(user_id, item_category)] = mean_vairance
 
-        logging.info("as of %s, user %s, category %s, mean vairance days %s" %\
-                     (window_end_date, user_id, item_category, buy_mean_days_list[index]))
+        # logging.info("as of %s, user %s, category %s, mean vairance days %s" %\
+        #              (window_end_date, user_id, item_category, buy_mean_days_list[index]))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -111,7 +111,7 @@ def feature_how_many_buy_category(window_start_date, window_end_date, user_item_
 
         how_many_buy_dict[(user_id, item_category)] = buy_count
         how_many_buy[index] = how_many_buy_dict[(user_id, item_category)]
-        logging.info("%s to %s, %s bought category %s %d" % (window_start_date, window_end_date, user_id, item_category, buy_count)) 
+        # logging.info("%s to %s, %s bought category %s %d" % (window_start_date, window_end_date, user_id, item_category, buy_count)) 
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -193,8 +193,8 @@ def feature_last_opt_category(window_start_date, window_end_date, user_item_pair
         days_from_last_opt_cat_dict[(user_id, item_category)] = days
 
         days_from_last_opt_cat_list[index] = days_from_last_opt_cat_dict[(user_id, item_category)]
-        logging.info("%s last opted category %s, days %s to %s" % \
-                     (user_id, item_category, days_from_last_opt_cat_dict[(user_id, item_category)], window_end_date))
+        # logging.info("%s last opted category %s, days %s to %s" % \
+        #              (user_id, item_category, days_from_last_opt_cat_dict[(user_id, item_category)], window_end_date))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 

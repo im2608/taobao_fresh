@@ -103,8 +103,8 @@ def feature_buy_view_ratio(window_start_date, window_end_date, user_item_pairs, 
 
         buy_view_ratio_dict[(user_id, item_category)] = round(buy_count / (buy_count + len(viewed_categories)), 4)
         buy_view_ratio_list[index, 0] = buy_view_ratio_dict[(user_id, item_category)]
-        logging.info("as of %s, %s bought category %s %d, viewed %d, ratio %.4f" % \
-                     (window_end_date, user_id, item_category, buy_count, len(viewed_categories), buy_view_ratio_list[index, 0]))
+        # logging.info("as of %s, %s bought category %s %d, viewed %d, ratio %.4f" % \
+        #              (window_end_date, user_id, item_category, buy_count, len(viewed_categories), buy_view_ratio_list[index, 0]))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
     
@@ -196,8 +196,8 @@ def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs, d
             if (total_behavior_cnt[index] != 0):
                 user_item_pop_list[index] = behavior_cnt[index] / total_behavior_cnt[index]
 
-        logging.info("(%s, %s), %s - %s , behavior cnt %s / %s" %
-                     (user_id, item_id, begin_date, checking_date, behavior_cnt, total_behavior_cnt))
+        # logging.info("(%s, %s), %s - %s , behavior cnt %s / %s" %
+        #              (user_id, item_id, begin_date, checking_date, behavior_cnt, total_behavior_cnt))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -268,8 +268,8 @@ def feature_last_opt_item(window_start_date, window_end_date, user_item_pairs, d
 
         days_from_last_opt_cat_list[index] =  days
 
-        logging.info("user %s last opted item %s days %s to %s" % \
-            (user_id, item_id, days_from_last_opt_cat_list[index], window_end_date))
+        # logging.info("user %s last opted item %s days %s to %s" % \
+        #     (user_id, item_id, days_from_last_opt_cat_list[index], window_end_date))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -334,8 +334,7 @@ def feature_behavior_cnt_before_1st_buy(window_start_date, window_end_date, user
         get_behavior_cnt_before_date(g_user_behavior_patten, first_buy_date, user_id, item_id, behavior_cnt)
 
         behavior_cnt_before_1st_buy_list[index] = behavior_cnt
-        logging.info("%s (%s, %s) 1st buy %s, behavior cnt %s" % (getCurrentTime(), user_id, item_id, \
-                     first_buy_date, behavior_cnt))
+        #logging.info("%s (%s, %s) 1st buy %s, behavior cnt %s" % (getCurrentTime(), user_id, item_id, first_buy_date, behavior_cnt))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -375,7 +374,7 @@ def feature_mean_days_between_buy_user_item(window_start_date, window_end_dat, u
 
         # 若只购买过一次，则将购买日期至checking date 作为平均天数
         if (len(buy_date) == 1):
-            buy_date.append(checking_date)
+            buy_date.append(window_end_dat)
 
         days = 0
         for date_index in range(1, len(buy_date)):

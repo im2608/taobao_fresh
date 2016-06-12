@@ -69,12 +69,13 @@ redis_cli = redis.Redis(host='10.57.14.7', port=6379, db=0)
 logging.basicConfig(level=logging.INFO,\
                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
                     datefmt='%a, %d %b %Y %H:%M:%S',\
-                    filename='..\\log\\log.%s.txt' % algo,\
+                    filename='..\\log\\log.test.%s.txt' % algo,\
                     filemode='w')
 
 # 判断子特征矩阵中的特征有哪些是有效的
 def featuresForForecasting(features_names):
     useful_features = []
+    logging.info("g_useful_feature_info len is %d" % (len(g_useful_feature_info)))
     for i, name in enumerate(features_names):
         if (name in g_useful_feature_info):
             useful_features.append(i)
@@ -93,6 +94,20 @@ def getUsefulFeatures(during_training, cur_total_feature_cnt, feature_mat, featu
     else:
         # 不是在训练过程中（在预测过程中）， useful_features 指明了子特征矩阵中的哪些特征是有效的，只返回那些有效的子特征        
         return feature_mat[:, useful_features], len(useful_features)
+
+
+def updateUsefulFeatures(features_importance):
+    # for idx, importance in enumerate(features_importance):
+    # if (importance == 0):
+    #     continue
+    # for feature_name in g_feature_info:
+    #     if (g_feature_info[feature_name] == idx):
+    #         g_useful_feature_info[feature_name] = idx
+    #         break
+
+    for feature_name, idx in g_feature_info.items():
+        g_useful_feature_info[feature_name] = idx
+    return
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
@@ -490,6 +505,7 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
     #根据用户得到用户操作过的item id
     user_index = 0
     skiped_user = 0
+    users_for_alog = [];
     for user_id in all_users:
         # if (user_id != '49818651'):
         #     continue
@@ -501,7 +517,7 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
         if (user_index > total_user + start_from):
             break
 
-        logging.info(user_id)
+        users_for_alog.append(user_id)
 
         #读取购物记录
         g_user_buy_transection[user_id] = dict()
@@ -517,7 +533,7 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
 
                 item_buy_record = user_whole_info[bytes(item_id.encode())].decode()
                 g_user_buy_transection[user_id][item_id] = getRecordsFromRecordString(item_buy_record)
-                #logging.info(" user %s buy %s: %s" % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
+                logging.info(" user %s buy %s: %s" % (user_id, item_id, g_user_buy_transection[user_id][item_id]))
                 g_user_buy_transection_item[item_id][user_id] = g_user_buy_transection[user_id][item_id]
                 g_buy_record_cnt += len(g_user_buy_transection[user_id][item_id])
         else:
@@ -555,6 +571,9 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
 
     print("%s total buy count %d, pattern count %d " % (getCurrentTime(), g_buy_record_cnt, g_pattern_cnt))
     logging.info("%s total buy count %d, pattern count %d " % (getCurrentTime(), g_buy_record_cnt, g_pattern_cnt))
+
+    if (run_for_users_cnt > 0):
+        logging.info("users for algo : %s" % users_for_alog)
 
     removeBuyCausedByDouble12()
 
@@ -709,3 +728,5 @@ def addSubFeatureMatIntoFeatureMat(sub_feature_mat, sub_feature_cnt, feature_mat
         feature_mat[:, cur_total_feature_cnt : cur_total_feature_cnt+sub_feature_cnt] = sub_feature_mat
 
     return sub_feature_cnt
+
+

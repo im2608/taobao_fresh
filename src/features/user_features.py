@@ -8,7 +8,7 @@ import numpy as np
 ################################  数据集中，用户的特征  ##############################################
 ####################################################################################################
 
-#在 [begin_date, end_date)时间段内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车的比率
+# 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车的比率
 def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, during_training, cur_total_feature_cnt):
     begin_date = end_date - datetime.timedelta(pre_days)
     logging.info("entered feature_how_many_behavior_user(%s, %s)" % (begin_date, end_date))
@@ -66,7 +66,7 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, during_t
 
         how_many_behavior_list[index] = behavior_cnt
         how_many_behavior_dict[user_id] = behavior_cnt
-        logging.info("behavior count %s %s (%s -- %s)" % (user_id, behavior_cnt, begin_date, end_date))
+        # logging.info("behavior count %s %s (%s -- %s)" % (user_id, behavior_cnt, begin_date, end_date))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -78,9 +78,9 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, during_t
 ######################################################################################################
 ######################################################################################################
 
-# 用户在 checking date（不包括） 之前每次购买日期距 checking date 的天数的平均值和方差, 返回两个特征
-def feature_mean_days_between_buy_user(checking_date, user_item_pairs, during_training):
-    logging.info("entered feature_mean_days_between_buy_user(%s)" % checking_date)
+# 用户在 checking date（不包括） 之前每次购买间隔的天数的平均值和方差, 返回两个特征
+def feature_mean_days_between_buy_user(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+    logging.info("entered feature_mean_days_between_buy_user(%s, %s)" % (window_start_date, window_end_date))
 
     features_names = ["feature_mean_days_between_buy_user_mean", "feature_mean_days_between_buy_user_variance"]
     useful_features = None
@@ -102,21 +102,38 @@ def feature_mean_days_between_buy_user(checking_date, user_item_pairs, during_tr
             mean_days_between_list[index] = mean_days_between_buy_dict[user_id]
             continue
 
-        days_to_checking_date = []
+        buy_date = set()
         for item_id, item_buy_records in g_user_buy_transection[user_id].items():
             for each_record in item_buy_records:
-                if (each_record[-1][1].date() < checking_date):
-                    days_to_checking_date.append((checking_date - each_record[-1][1].date()).days)
+                if (each_record[-1][1].date() >= window_start_date and 
+                    each_record[-1][1].date() < window_end_date):
+                    buy_date.add(each_record[-1][1].date())
+
+        if (len(buy_date) == 0):
+            continue
+
+        buy_date = list(buy_date)
+        buy_date.sort()
+
+        # 若只购买过一次，则将购买日期至 end date 作为平均天数
+        if (len(buy_date) == 1):
+            buy_date.append(window_end_date)
+
+        days_between_buy = []
+        for date_index in range(1, len(buy_date)):
+            days_between_buy.append((buy_date[date_index] - buy_date[date_index-1]).days)
 
         mean_vairance = [0, 0]
-        if (len(days_to_checking_date) > 0):            
-            mean_vairance[0] = np.round(np.mean(days_to_checking_date), 4)
-            mean_vairance[1] = np.round(np.var(days_to_checking_date), 4)
+        mean_vairance[0] = np.round(np.mean(days_between_buy), 2)
+        mean_vairance[1] = np.round(np.var(days_between_buy), 2)
+        # logging.info("user mean days to buy: %s %s" % (user_id, mean_vairance))
 
+        # 实际训练中去掉小数点
+        mean_vairance[0] = np.round(np.mean(days_between_buy))
+        mean_vairance[1] = np.round(np.var(days_between_buy))
         mean_days_between_buy_dict[user_id] = mean_vairance
         mean_days_between_list[index] = mean_days_between_buy_dict[user_id]
 
-        logging.info("%s %s, %d" % (user_id, mean_days_between_list[index], len(days_to_checking_date)))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -128,46 +145,74 @@ def feature_mean_days_between_buy_user(checking_date, user_item_pairs, during_tr
 ######################################################################################################
 ######################################################################################################
 
-# 用户最后一次购买行为至 checking date（不包括）的天数, 没有购买过则为0
-def feature_last_buy_user(checking_date, user_item_pairs, during_training, cur_total_feature_cnt):
-    logging.info("entered feature_last_buy_user(%s)" % checking_date)
 
-    feature_name = "feature_last_buy_user"
-    if (not during_training and feature_name not in g_useful_feature_info):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
+# 用户最后一次行为至 window_end_date （不包括）的天数, 没有该行为则为 0, 返回4个特征
+def get_last_opt_item_date(user_records, window_start_date, window_end_date, user_id):
+    days = [0, 0, 0, 0]
 
-    last_buy_dict = dict()
-    last_buy_list = np.zeros((len(user_item_pairs), 1))
+    if (user_id not in user_records):
+        return days
+
+    last_opt_date = [window_start_date for x in range(4)]
+
+    for item_kd, behavior_record in user_records[user_id].items():
+        for each_record in behavior_record:
+            for index in range(len(each_record)-1, -1, -1):
+                #each_record 已经按照时间排好序
+                behavior_type = each_record[index][0]
+                behavior_date = each_record[index][1].date()
+                if (behavior_date > last_opt_date[behavior_type - 1] and \
+                    behavior_date < window_end_date):            
+                    last_opt_date[behavior_type - 1] = behavior_date
+                    days[behavior_type - 1] = (window_end_date - behavior_date).days
+    return days
+
+
+# [window_start_date, window_end_date) 期间， 用户最后一次行为至 window_end_date （不包括）的天数, 没有该行为则为 0, 返回4个特征
+def feature_last_behavior_user(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+    logging.info("entered feature_last_behavior_user(%s, %s)" % (window_start_date, window_end_date))
+    features_names = ["feature_last_behavior_user_view", 
+                      "feature_last_behavior_user_fav",
+                      "feature_last_behavior_user_cart",
+                      "feature_last_behavior_user_buy"]
+
+    useful_features = None
+    if (not during_training):
+        useful_features = featuresForForecasting(features_names)
+        if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_last_behavior_user] has no useful features")
+            return None, 0
+        else:
+            logging.info("During forecasting, [feature_last_behavior_user] has %d useful features" % len(useful_features))
+
+    last_behavior_user_dict = dict()
+    last_behavior_user_list = np.zeros((len(user_item_pairs), 4))
 
     total_cnt = len(user_item_pairs)
     for index in range(len(user_item_pairs)):
         user_id = user_item_pairs[index][0]
-        if (user_id in last_buy_dict):
-            last_buy_list[index] = last_buy_dict[user_id]
+        if (user_id in last_behavior_user_dict):
+            last_behavior_user_list[index] = last_behavior_user_dict[user_id]
             continue
 
-        last_buy_date = None
-        for item_id, item_buy_records in g_user_buy_transection[user_id].items():
-            for each_record in item_buy_records:
-                if (each_record[-1][1].date() >= checking_date):
-                    continue
+        days = get_last_opt_item_date(g_user_buy_transection, window_start_date, window_end_date, user_id)
+        days2 = get_last_opt_item_date(g_user_behavior_patten, window_start_date, window_end_date, user_id)
+        for index in range(len(days)):
+            if (days[index] == 0):
+                if (days2 != 0):
+                    days[index] = days2[index]
+            elif (days2[index] != 0):
+                days[index] = min(days[index], days2[index])
 
-                if (last_buy_date == None or last_buy_date < each_record[-1][1].date()):
-                    last_buy_date = each_record[-1][1].date()
-
-        last_buy_dict[user_id] = (checking_date - last_buy_date).days
-        last_buy_list[index] = last_buy_dict[user_id]
-        logging.info("%s last buy %s / %d days" % (user_id, last_buy_date, last_buy_list[index]))
+        last_behavior_user_dict[user_id] = days
+        last_behavior_user_list[index] = days
+        # logging.info("user %s, last behavior %s" % (user_id, days))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    if (during_training):
-        g_feature_info[cur_total_feature_cnt] = feature_name
-
     logging.info("leaving feature_last_buy_user")
 
-    return last_buy_list, 1
+    return getUsefulFeatures(during_training, cur_total_feature_cnt, last_behavior_user_list, features_names, useful_features)
 
 
 ######################################################################################################
@@ -176,7 +221,7 @@ def feature_last_buy_user(checking_date, user_item_pairs, during_training, cur_t
 
 #截止到checking_date（不包括）， 用户有多少天进行了各种类型的操作
 # 返回 4 个特征
-def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_item_pairs, during_training):    
+def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):    
     logging.info("feature_how_many_days_for_behavior %s -- %s" % (window_start_date, window_end_date))
 
     features_names = ["feature_how_many_days_for_behavior_view", 
@@ -220,20 +265,21 @@ def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_
             for item_id, item_opt_records in g_user_behavior_patten[user_id].items():
                 for each_record in item_opt_records:
                     for each_behavior in each_record:
-                        if (each_behavior[1].date() < checking_date):
+                        if (each_behavior[1].date() >= window_start_date and
+                            each_behavior[1].date() < window_end_date):
                             days_for_behavior_dict[each_behavior[0]].add(each_behavior[1].date())
 
         days_for_behavior = [len(days_for_behavior_dict[x]) for x in range(1, 5)]
 
         hwo_many_days_for_behavior_list[index] = days_for_behavior
         hwo_many_days_for_behavior_dict[user_id] = days_for_behavior
-        logging.info("how many dasy for behavior %s %s" % (user_id, days_for_behavior))
+        # logging.info("how many dasy for behavior %s %s" % (user_id, days_for_behavior))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     logging.info("leaving feature_how_many_days_for_behavior")
 
-    return hwo_many_days_for_behavior_list
+    return getUsefulFeatures(during_training, cur_total_feature_cnt, hwo_many_days_for_behavior_list, features_names, useful_features)
 
 
 ######################################################################################################
@@ -241,68 +287,73 @@ def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_
 ######################################################################################################
 
 # 返回 user id 在 [week begin, week end) 内的购物列表
-def buy_list_in_week(user_id, week_begin, week_end):
+def buy_list_in_week(user_id, each_day, window_end_date):
     buy_set = set()
     for item_id, item_buy_records in g_user_buy_transection[user_id].items():
         for each_record in item_buy_records:
-            if (week_begin <= each_record[-1][1].date()  and each_record[-1][1].date() < week_end):
+            if (window_start_date <= each_record[-1][1].date()  and each_record[-1][1].date() < window_end_date):
                 buy_set.add(item_id)
 
-    logging.info("%s bought %s from %s to %s" % (user_id, buy_set, week_begin, week_end))
+    logging.info("%s bought %s from %s to %s" % (user_id, buy_set, window_start_date, window_end_date))
     return buy_set
 
-# 截止到checking_date（不包括），
-# 用户A有1周购买的商品有多少种
-# 用户A有2周购买的商品有多少种
-# 用户A有3周购买的商品有多少种
-# 用户A有4周购买的商品有多少种
-# 返回 4 个特征
-def feature_how_many_buy_in_weeks(checking_date, user_item_pairs, during_training, cur_total_feature_cnt):
-    logging.info("feature_how_many_buy_in_weeks %s " % checking_date)
+# [start date, end date) 范围内，用户购买过 1/2/3/4 ... ... /slide window days 次的item有多少， 返回 slide window days 个特征
+# 用户在同一天内多次购买同一个item算一次
+# 例如 用户在 第1天购买了item1，item2， item3， 然后在第5天又购买了该item1, 第6 天购买了 item2， 第7 天购买了item3，第 8 天有购买了item3
+# 用户购买过item1， item2两次，购买过item3 三次，则buy_in_days_list[2] = 2， buy_in_days_list[3] = 1
+def feature_how_many_buy_in_days(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):    
+    logging.info("feature_how_many_buy_in_days (%s, %s)" % (window_start_date, window_end_date))
+    slide_window_days = (window_end_date - window_start_date).days
+    features_names = []
+    for day in range(1, slide_window_days + 1):
+        features_names.append("feature_how_many_buy_in_days_%d" % day)    
 
-    how_many_buy_in_weeks_dict = dict()
-    how_many_buy_in_weeks_list = np.zeros((len(user_item_pairs), 4))
+    useful_features = None
+    if (not during_training):
+        useful_features = featuresForForecasting(features_names)
+        if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_how_many_buy_in_days] has no useful features")
+            return None, 0
+        else:
+            logging.info("During forecasting, [feature_how_many_buy_in_days] has %d useful features" % len(useful_features))
 
-    week_end = checking_date
-    weeks_range = []
+    buy_in_days_list = np.zeros((len(user_item_pairs), slide_window_days))
+    buy_in_days_dict = dict()
+
     total_cnt = len(user_item_pairs)
-    # 得到 4 周的始末时间
-    for i in range(4):
-        week_begin = week_end - datetime.timedelta(7)
-        weeks_range.append((week_begin, week_end))
-        week_end = week_begin
-
     for index in range(len(user_item_pairs)):
         user_id = user_item_pairs[index][0]
 
-        if (user_id in how_many_buy_in_weeks_dict):
-            how_many_buy_in_weeks_list[index] = how_many_buy_in_weeks_dict[user_id]
+        if (user_id in buy_in_days_dict):
+            buy_in_days_list[index] = buy_in_days_dict[user_id]
             continue
 
-        #统计每个 item 出现的次数， 1 -- 4 次
-        buy_count_dict = dict()
-        for each_week in weeks_range:
-            buy_set_for_week = buy_list_in_week(user_id, each_week[0], each_week[1])
-            for item_id in buy_set_for_week:
-                if (item_id not in buy_count_dict):
-                    buy_count_dict[item_id] = 0
-                buy_count_dict[item_id] += 1
+        #统计每个 item 出现的次数， 0 -- slide window day 次
+        buy_in_days = [0 for x in range(slide_window_days)]
 
-        buy_count_for_weeks = [0, 0, 0, 0]
-        for item_id in buy_count_dict:
-            buy_count_for_weeks[buy_count_dict[item_id] - 1] += 1
+        #item 在哪天被user购买
+        date_user_buy_items = dict()
+        for item_id, item_buy_records in g_user_buy_transection[user_id].items():
+            for each_record in item_buy_records:
+                buy_date = each_record[-1][1].date()
+                if (buy_date >= window_start_date and buy_date < window_end_date):
+                    if (item_id not in date_user_buy_items):
+                        date_user_buy_items[item_id] = set()
+                    date_user_buy_items[item_id].add(buy_date)
 
-        how_many_buy_in_weeks_dict[user_id] = buy_count_for_weeks
-        how_many_buy_in_weeks_list[index] = buy_count_for_weeks
+        for item_id, days_buy_item in date_user_buy_items.items():
+            buy_in_days[len(days_buy_item) - 1] += 1
 
-        logging.info("user %s %s" % (user_id, buy_count_for_weeks))
+        buy_in_days_list[index] = buy_in_days
+        buy_in_days_dict[user_id] = buy_in_days
+
+        # logging.info("how many buy in days user %s %s" % (user_id, buy_in_days))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     logging.info("leaving feature_how_many_buy_in_weeks")
 
-    return how_many_buy_in_weeks_list
-
+    return getUsefulFeatures(during_training, cur_total_feature_cnt, buy_in_days_list, features_names, useful_features)
 
 ######################################################################################################
 ######################################################################################################

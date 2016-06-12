@@ -1,5 +1,8 @@
 from common import *
 import apriori
+import GBDT
+from taking_sample import *
+from sklearn import preprocessing
 
 
 buy_records_mysql = dict()
@@ -49,10 +52,135 @@ def verifyBuyRecords():
     return 0
 
 
-file_idx = 37
-data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
+# file_idx = 37
+# data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
 
-#apriori.loadData(True)
-apriori.loadRecordsFromRedis()
-apriori.saveRecordstoRedis()
-#verifyBuyRecords()
+# #apriori.loadData(True)
+# apriori.loadRecordsFromRedis()
+# apriori.saveRecordstoRedis()
+# #verifyBuyRecords()
+
+
+def calcuatingF1(forecast_date, predicted_user_item, actual_user_item):
+    actual_count = len(actual_user_item)
+    predicted_count = len(predicted_user_item)
+
+    hit_count = 0
+    user_hit_list = set()
+
+    for user_item in predicted_user_item:
+        logging.info("predicted %s, %s" % (user_item[0], user_item[1]))
+        if (user_item in actual_user_item):
+            hit_count += 1
+
+    for user_item in predicted_user_item:
+        for user_item2 in actual_user_item:
+            if (user_item[0] == user_item2[0]):
+                user_hit_list.add(user_item[0])
+
+    print("hit user: %s" % user_hit_list)
+
+    for user_item in actual_user_item:
+        logging.info("acutal buy %s, %s" % (user_item[0], user_item[1]))
+
+    print("forecasting date %s, positive count %d, predicted count %d, hit count %d" %\
+          (forecast_date, actual_count, predicted_count, hit_count))
+
+    if (predicted_count != 0):
+        p = hit_count / predicted_count
+    else:
+        p = 0
+
+    if (actual_count != 0):
+        r = hit_count / actual_count
+    else:
+        r = 0
+
+    if (p != 0 or r != 0):        
+        f1 = 2 * p * r / (p + r)
+    else:
+        f1 = 0
+
+    print("precission: %.4f, recall %.4f, F1 %.4f" % (p, r, f1))
+
+    return
+
+
+def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, verify_user_start, verify_user_cnt, clf, grd_enc, logisticReg):
+    print("=====================================================================")
+    print("=========================  verifying...  ============================")
+    print("=====================================================================")
+
+    g_user_buy_transection.clear()
+
+    print("%s reloading verifying users..." % (getCurrentTime()))
+    loadRecordsFromRedis(verify_user_start, verify_user_cnt)
+
+    item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
+
+    verify_samples = takingSamplesForForecasting(window_start_date, forecast_date)
+    
+    print("%s creating verifying feature matrix..." % (getCurrentTime()))
+    Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, item_popularity_dict, False)
+    Xmat_verify = preprocessing.scale(Xmat_verify)
+
+    X_leaves_verify = grd_enc.transform(clf.apply(Xmat_verify))
+
+    predicted_prob = logisticReg.predict_proba(X_leaves_verify)
+
+    predicted_user_item = []
+    for index in range(len(predicted_prob)):
+        if (predicted_prob[index][1] >= min_proba):
+            predicted_user_item.append(verify_samples[index])
+
+    actual_user_item = takingPositiveSamples(forecast_date)
+
+    calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
+    return
+
+
+def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos, verify_user_start, verify_user_cnt, topK,
+                                  slide_windows_models, logisticReg, gbdtRegressor, rfcls):
+    print("=====================================================================")
+    print("===================  verifyPredictionEnsembleModel... ===============")
+    print("=====================================================================")
+
+    g_user_buy_transection.clear()
+
+    print("%s reloading verifying users..." % (getCurrentTime()))
+    loadRecordsFromRedis(verify_user_start, verify_user_cnt)
+
+    item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
+
+    verify_samples = takingSamplesForForecasting(window_start_date, forecast_date)
+
+    print("%s creating verifying feature matrix..." % (getCurrentTime()))
+    Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, item_popularity_dict, True)
+    Xmat_verify = preprocessing.scale(Xmat_verify)
+
+    X_verify_features = Xmat_verify
+    for clf_model in slide_windows_models:    
+        # grd_enc.fit(clf_model.apply(Xmat_verify))
+        # X_verify_enc = grd_enc.transform(clf_model.apply(Xmat_verify)).toarray()
+        X_verify_enc = clf_model.apply(Xmat_verify)[:, :, 0]
+        X_verify_features = np.column_stack((X_verify_features, X_verify_enc))
+
+    findal_predicted_prob = logisticReg.predict_proba(X_verify_features)
+    findal_predicted_prob += gbdtRegressor.predict_proba(X_verify_features)
+    findal_predicted_prob += rfcls.predict_proba(X_verify_features)
+
+    # 按照 probability 降序排序
+    prob_desc = np.argsort(-findal_predicted_prob[:, 1])
+
+    topK = round(len(verify_samples) / 2)
+
+    predicted_user_item = []
+
+    for index in range(topK):
+        user_item = verify_samples[prob_desc[index]]
+        predicted_user_item.append(user_item)
+
+    actual_user_item = takingPositiveSamples(forecast_date)
+
+    calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
+    return 
