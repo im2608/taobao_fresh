@@ -299,58 +299,27 @@ def takingNagetiveSamples2(window_start_date, window_end_date, positive_samples,
     return nagetive_samples
 
 def takingSamplesForForecasting(window_start_date, forecasting_date):
-    samples_for_testing = dict()
+    samples_for_forecasting = dict()
+
     for user_id, item_buy_records in g_user_buy_transection.items():
         for item_id, buy_records in item_buy_records.items():
             if (item_id not in global_test_item_category):
                 continue
             for each_record in buy_records:
                 if (each_record[-1][1].date() == forecasting_date):
-                    samples_for_testing[(user_id, item_id)] = 1
+                    samples_for_forecasting[(user_id, item_id)] = 1
+    print("        %s takingSamplesForForecasting postive samples %d " % (getCurrentTime(), len(samples_for_forecasting)))
 
     #从测试集中取样与在训练集中采样负样本的逻辑相同
     for user_id, item_pattern_records in g_user_behavior_patten.items():
         for item_id in item_pattern_records:
             if (shouldTakeNagetiveSample(window_start_date, forecasting_date, user_id, item_id)):
-                samples_for_testing[(user_id, item_id)] = 1
+                samples_for_forecasting[(user_id, item_id)] = 0
 
-    print("        %s taking %d sample from testing set" % (getCurrentTime(), len(samples_for_testing)))
-    return list(samples_for_testing.keys())
+    print("        %s taking %d sample from testing set" % (getCurrentTime(), len(samples_for_forecasting)))
+    samples = list(samples_for_forecasting.keys())
+    Ymat = []
+    for each_sample in samples:
+        Ymat.append(samples_for_forecasting[each_sample])
 
-
-
-
-
-def plotDeviance(window_start_date, window_end_date, nag_per_pos, params, clf):
-    window_start_date = window_start_date + datetime.timedelta(1)
-    window_end_date = window_end_date + datetime.timedelta(1)
-    item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
-    X_test, Y_test = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
-    mse = mean_squared_error(Y_test, clf.predict(X_test))
-    print("        %s MSE: %.4f" % (getCurrentTime(), mse))
-    test_score = np.zeros((params['n_estimators'],), dtype=np.float64)
-
-    for i, y_pred in enumerate(clf.staged_predict(X_test)):
-        test_score[i] = clf.loss_(y_test, y_pred)
-    plt.figure(figsize=(12, 6))
-    plt.subplot(1, 2, 1)
-    plt.title('Deviance')
-    plt.plot(np.arange(params['n_estimators']) + 1, clf.train_score_, 'b-',
-             label='Training Set Deviance')
-    plt.plot(np.arange(params['n_estimators']) + 1, test_score, 'r-',
-             label='Test Set Deviance')
-    plt.legend(loc='upper right')
-    plt.xlabel('Boosting Iterations')
-    plt.ylabel('Deviance')
-
-    feature_importance = clf.feature_importances_
-    # make importances relative to max importance
-    feature_importance = 100.0 * (feature_importance / feature_importance.max())
-    sorted_idx = np.argsort(feature_importance)
-    pos = np.arange(sorted_idx.shape[0]) + .5
-    plt.subplot(1, 2, 2)
-    plt.barh(pos, feature_importance[sorted_idx], align='center')
-    plt.yticks(pos, boston.feature_names[sorted_idx])
-    plt.xlabel('Relative Importance')
-    plt.title('Variable Importance')
-    plt.show()
+    return samples, Ymat

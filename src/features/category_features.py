@@ -1,7 +1,7 @@
 from common import *
 import numpy as np
 import time
-
+from feature_selection import *
 
 ################################################################################################
 ################################################################################################
@@ -34,32 +34,31 @@ def get_everyday_behavior_cnt_of_category(window_start_date, window_end_date, it
 
 # 在 [begin_date, checking_date) 期间， 各个 behavior 在 item 上的总次数, 平均每天的点击数以及方差
 # 返回 12 个特征
-def feature_beahvior_cnt_on_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
-    logging.info("feature_beahvior_cnt_on_category(%s, %s)" % (window_start_date, window_end_date))
-    features_names = ["feature_beahvior_cnt_on_category_view", 
-                      "feature_beahvior_cnt_on_category_fav",
-                      "feature_beahvior_cnt_on_category_cart",
-                      "feature_beahvior_cnt_on_category_buy",
-                      "feature_beahvior_cnt_on_category_view_mean", 
-                      "feature_beahvior_cnt_on_category_fav_mean",
-                      "feature_beahvior_cnt_on_category_cart_mean",
-                      "feature_beahvior_cnt_on_category_buy_mean",
-                      "feature_beahvior_cnt_on_category_view_var", 
-                      "feature_beahvior_cnt_on_category_fav_var",
-                      "feature_beahvior_cnt_on_category_cart_var",
-                      "feature_beahvior_cnt_on_category_buy_var"]
+def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+    logging.info("feature_beahvior_cnt_on_category(%d, %s)" % (pre_days, window_end_date))
+    features_names = ["feature_beahvior_cnt_on_category_%d_view" % pre_days, 
+                      "feature_beahvior_cnt_on_category_%d_fav" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_cart" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_buy" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_view_mean" % pre_days, 
+                      "feature_beahvior_cnt_on_category_%d_fav_mean" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_cart_mean" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_buy_mean" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_view_var" % pre_days, 
+                      "feature_beahvior_cnt_on_category_%d_fav_var" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_cart_var" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_buy_var" % pre_days]
 
-    start_time = time.clock()
     useful_features = None
-    if (not during_training):
-        useful_features = featuresForForecasting(features_names)
+    if (not cal_feature_importance):
+        useful_features = featuresForForecasting(features_names, final_feature_importance)
         if (len(useful_features) == 0):
             logging.info("During forecasting, [feature_beahvior_cnt_on_category] has no useful features")
             return None, 0
         else:
             logging.info("During forecasting, [feature_beahvior_cnt_on_category] has %d useful features" % len(useful_features))
 
-    end_time = time.clock()
+    window_start_date = window_end_date - datetime.timedelta(pre_days)
 
     time_for_every_day1 = 0
     time_for_every_day2 = 0
@@ -107,14 +106,14 @@ def feature_beahvior_cnt_on_category(window_start_date, window_end_date, user_it
         end_time = time.clock()
         time_for_calculating += end_time - start_time
 
-        logging.info("%s category, behavior cnt, mean, var %s" % (item_category, behavior_cnt_mean_var))
+        # logging.info("%s category, behavior cnt, mean, var %s" % (item_category, behavior_cnt_mean_var))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     # print("every day1 %d, every day2 %d, calculated %d" % (time_for_every_day1, time_for_every_day2, time_for_calculating))
 
     logging.info("leaving feature_beahvior_cnt_on_category")
-    return getUsefulFeatures(during_training, cur_total_feature_cnt, category_behavior_cnt_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, category_behavior_cnt_list, features_names, useful_features)
 
 ################################################################################################
 ################################################################################################
@@ -159,8 +158,8 @@ def get_category_1st_last_behavior_date(window_start_date, window_end_date, item
     return days_from_1st_behavior + days_from_last_behavior
 
 
-# category 第一次, 最后一次 behavior 距离checking date 的天数, 返回 8 个特征
-def feature_days_from_1st_last_behavior_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+# category 第一次, 最后一次 behavior 距离checking date 的天数, 以及 behavior 第一次, 最后一次之间的天数， 返回 12 个特征
+def feature_days_from_1st_last_behavior_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     logging.info("feature_days_from_1st_last_behavior_category (%s, %s)" % (window_start_date, window_end_date))
 
     features_names = ["feature_days_from_1st_behavior_categroy_view", 
@@ -170,16 +169,20 @@ def feature_days_from_1st_last_behavior_category(window_start_date, window_end_d
                       "feature_days_from_last_behavior_categroy_view", 
                       "feature_days_from_last_behavior_categroy_fav", 
                       "feature_days_from_last_behavior_categroy_cart", 
-                      "feature_days_from_last_behavior_categroy_buy"]
+                      "feature_days_from_last_behavior_categroy_buy",
+                      "feature_days_between_1st_last_behavior_categroy_view", 
+                      "feature_days_between_1st_last_behavior_categroy_fav", 
+                      "feature_days_between_1st_last_behavior_categroy_cart", 
+                      "feature_days_between_1st_last_behavior_categroy_buy"]
 
     useful_features = None
-    if (not during_training):
-        useful_features = featuresForForecasting(features_names)
+    if (not cal_feature_importance):
+        useful_features = featuresForForecasting(features_names, final_feature_importance)
         if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_days_from_1st_behavior] has no useful features")
+            logging.info("During forecasting, [feature_days_from_1st_last_behavior_category] has no useful features")
             return None, 0
         else:
-            logging.info("During forecasting, [feature_days_from_1st_behavior] has %d useful features" % len(useful_features))
+            logging.info("During forecasting, [feature_days_from_1st_last_behavior_category] has %d useful features" % len(useful_features))
 
 
     days_from_1st_last_dict = dict()
@@ -212,26 +215,32 @@ def feature_days_from_1st_last_behavior_category(window_start_date, window_end_d
             else:
                 days_from_1st_last_1[i+4] = days_from_1st_last_2[i+4]
 
+        days_between_1st_last = [0, 0, 0, 0]
+        for i in range(4):
+            days_between_1st_last[i] = days_from_1st_last_1[i] - days_from_1st_last_1[i+4]
+
+        days_from_1st_last_1.extend(days_between_1st_last)
+
         days_from_1st_last_list[index] = days_from_1st_last_1
         days_from_1st_last_dict[item_category] = days_from_1st_last_1
 
-        logging.info("%s category, days from 1st, last behavior %s" % (item_category, days_from_1st_last_1))
+        # logging.info("%s category, days from 1st, last behavior %s" % (item_category, days_from_1st_last_1))
 
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    return getUsefulFeatures(during_training, cur_total_feature_cnt, days_from_1st_last_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, days_from_1st_last_list, features_names, useful_features)
 
 ################################################################################################
 ################################################################################################
 ################################################################################################
 
 # [begin date, end date) 期间，总共有多少用户购买了该 category
-def feature_how_many_users_bought_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+def feature_how_many_users_bought_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     logging.info("feature_how_many_users_bought_category (%s, %s)" % (window_start_date, window_end_date))
 
     feature_name = "feature_how_many_users_bought_category"
-    if (not during_training and feature_name not in g_useful_feature_info):
+    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
         logging.info("%s has no useful features" % feature_name)
         return None, 0
 
@@ -249,7 +258,7 @@ def feature_how_many_users_bought_category(window_start_date, window_end_date, u
             continue
 
         items_of_category = global_train_category_item[item_category]
-        logging.info("category %s has %d items" % (item_category, len(items_of_category)))
+        # logging.info("category %s has %d items" % (item_category, len(items_of_category)))
 
         users_bought_item = set()
         for item_id in items_of_category:
@@ -267,10 +276,10 @@ def feature_how_many_users_bought_category(window_start_date, window_end_date, u
         how_many_users_bought_dict[item_id] = user_cnt
         how_many_users_bought_list[index] = user_cnt
 
-        logging.info("%d users bought category %s" % (user_cnt, item_category))
+        # logging.info("%d users bought category %s" % (user_cnt, item_category))
 
-    if (during_training):
-        g_feature_info[cur_total_feature_cnt] = feature_name
+    if (cal_feature_importance):
+        g_feature_info[feature_name] = cur_total_feature_cnt
 
     logging.info("leaving feature_how_many_users_bought_category")
     return how_many_users_bought_list, 1
@@ -278,3 +287,45 @@ def feature_how_many_users_bought_category(window_start_date, window_end_date, u
 ################################################################################################
 ################################################################################################
 ################################################################################################
+# [begin date, end date) 期间， category 的销量
+def feature_category_sals_volume(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+    logging.info("feature_category_sals_volume (%s, %s)" % (window_start_date, window_end_date))
+
+    feature_name = "feature_category_sals_volume"
+    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
+        logging.info("%s has no useful features" % feature_name)
+        return None, 0
+
+    sals_volume_dict = dict()
+    sals_volume_list = np.zeros((len(user_item_pairs), 1))
+
+    for index in range(len(user_item_pairs)):
+        item_id = user_item_pairs[index][1]
+
+        item_category = global_train_item_category[item_id]
+
+        if (item_category in sals_volume_dict):
+            sals_volume_list[index] = sals_volume_dict[item_category]
+            continue
+
+        items_of_category = global_train_category_item[item_category]
+
+        sales_vol = 0
+        for item_id in items_of_category:  
+            if (item_id not in g_user_buy_transection_item):
+                continue
+            for user_id, item_buy_records in g_user_buy_transection_item[item_id].items():
+                for each_record in item_buy_records:
+                    if (each_record[-1][1].date() > window_start_date and each_record[-1][1].date() < window_end_date):
+                        sales_vol += 1
+
+        sals_volume_dict[item_id] = sales_vol
+        sals_volume_list[index] = sales_vol
+        # logging.info("%s category sales volume %d " % (item_id, sals_volume_list[index]))
+
+    if (cal_feature_importance):
+        g_feature_info[feature_name] = cur_total_feature_cnt
+
+    logging.info("leaving feature_category_sals_volume")
+
+    return sals_volume_list, 1

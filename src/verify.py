@@ -118,7 +118,7 @@ def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, v
 
     item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
 
-    verify_samples = takingSamplesForForecasting(window_start_date, forecast_date)
+    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date)
     
     print("%s creating verifying feature matrix..." % (getCurrentTime()))
     Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, item_popularity_dict, False)
@@ -139,10 +139,10 @@ def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, v
     return
 
 
-def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos, verify_user_start, verify_user_cnt, topK,
-                                  slide_windows_models, logisticReg, gbdtRegressor, rfcls):
+def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos, verify_user_start, verify_user_cnt, topK, min_proba,
+                                  slide_windows_models, logisticReg, gbdtRegressor, rfcls, final_feature_importance):
     print("=====================================================================")
-    print("===================  verifyPredictionEnsembleModel... ===============")
+    print("============verifyPredictionEnsembleModel %s, %s ===============" % (window_start_date, forecast_date))
     print("=====================================================================")
 
     g_user_buy_transection.clear()
@@ -152,10 +152,10 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
 
     item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
 
-    verify_samples = takingSamplesForForecasting(window_start_date, forecast_date)
+    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date)
 
     print("%s creating verifying feature matrix..." % (getCurrentTime()))
-    Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, item_popularity_dict, True)
+    Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, item_popularity_dict, False, final_feature_importance)
     Xmat_verify = preprocessing.scale(Xmat_verify)
 
     X_verify_features = Xmat_verify
@@ -165,6 +165,10 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
         X_verify_enc = clf_model.apply(Xmat_verify)[:, :, 0]
         X_verify_features = np.column_stack((X_verify_features, X_verify_enc))
 
+    m, n = np.shape(X_verify_features)
+
+    print("Verify featurs shape (%d, %d)" % (m, n))
+
     findal_predicted_prob = logisticReg.predict_proba(X_verify_features)
     findal_predicted_prob += gbdtRegressor.predict_proba(X_verify_features)
     findal_predicted_prob += rfcls.predict_proba(X_verify_features)
@@ -172,11 +176,21 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
     # 按照 probability 降序排序
     prob_desc = np.argsort(-findal_predicted_prob[:, 1])
 
-    topK = round(len(verify_samples) / 2)
+    if (len(verify_samples) > 1000):
+        topK = 1000
+    else:
+        topK = round(len(verify_samples) / 2)
+
+    print("%s probility of top1 = %.4f, top%d = %.4f" % 
+          (getCurrentTime(), findal_predicted_prob[prob_desc[0], 1], topK, findal_predicted_prob[prob_desc[topK], 1] ))
 
     predicted_user_item = []
 
     for index in range(topK):
+        if (findal_predicted_prob[prob_desc[index], 1] < min_proba):
+            print("        %s probability %.4f < min_proba %.4f, breaking..." %
+                  (getCurrentTime(), findal_predicted_prob[prob_desc[index], 1], min_proba))
+            break
         user_item = verify_samples[prob_desc[index]]
         predicted_user_item.append(user_item)
 

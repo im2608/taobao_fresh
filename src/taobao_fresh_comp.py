@@ -149,6 +149,35 @@ def loadTestingFeaturesFromRedis():
     print("load %d tesing samples from redis" % len(samples_test_list))
     return samples_test_list
 
+
+# 若 cal_feature_importance = True， 则累加特征的重要性， 忽略 final_feature_importance
+# 若为 False，则 final_feature_importance 为累加好的特征重要性， 根据特征的重要性在滑动窗口内重新训练model
+def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, cal_feature_importance, final_feature_importance):
+    window_end_date = window_start_date + datetime.timedelta(slide_windows_days)
+
+    slide_windows_models = []
+    feature_importances = None
+
+    #滑动窗口 11-18 -- 12-17 得到特征的重要性， 并保留每个滑动窗口训练出的的model
+    while (window_end_date < final_end_date):    
+        slide_window_clf = GBDT.GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, final_feature_importance)
+        if (slide_window_clf == None):
+            window_end_date += datetime.timedelta(1)
+            window_start_date += datetime.timedelta(1)
+            continue
+
+        slide_windows_models.append(slide_window_clf)
+        if (cal_feature_importance):
+            if (feature_importances is None):
+                feature_importances = slide_window_clf.feature_importances_
+            else:
+                feature_importances += slide_window_clf.feature_importances_
+
+        window_end_date += datetime.timedelta(1)
+        window_start_date += datetime.timedelta(1)
+
+    return slide_windows_models, feature_importances
+
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
@@ -159,12 +188,7 @@ import RF
 import GBDT
 from taking_sample import *
 import verify
-
-file_idx = 53
-data_file = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, file_idx)
-
-need_verify = False
-factor = 0.1
+from feature_selection import *
 
 #apriori.loadDataAndSaveToRedis(need_verify)
 #loadTrainCategoryItemAndSaveToRedis()
@@ -175,110 +199,47 @@ print("--------------------------------------------------")
 loadTrainCategoryItemFromRedis()
 loadTestSet()
 
-need_output = 1
-print("%s ************** output is %d ************" % (getCurrentTime(), need_output))
-
-if (algo == "Apriori"):
-    print("%s ============ Algorithm is Apriori ============" % (getCurrentTime()))
-
-    apriori.loadRecordsFromRedis(factor, need_verify)
-    # apriori.Bayes(need_verify)
-
-    #apriori.loadFrequentItemsFromRedis()
-    #L = apriori.aprioriAlgorithm()
-    #apriori.matchPatternAndFrequentItem(L, factor, need_verify)
-    if (need_verify):
-        apriori.verificationForecast()
-    #apriori.saveFrequentItemToRedis(L)
-
-elif (algo == "LR"):
-    print("%s ============ Algorithm is Logistic Regression ============" % (getCurrentTime()))
-    if (need_output == 1):
-        start_from = 0
-        user_cnt = 0
-        checking_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
-        forecast_date = checking_date + datetime.timedelta(1)
-        loadRecordsFromRedis(start_from, user_cnt)
-        LR.logisticRegression(user_cnt, checking_date, forecast_date, need_output)
-    else:
-        start = 0
-        user_cnt = 0
-        checking_date = datetime.datetime.strptime("2014-12-05", "%Y-%m-%d").date()
-        forecast_date = checking_date + datetime.timedelta(1)
-        loadRecordsFromRedis(start, user_cnt)
-        LR.logisticRegression(user_cnt, checking_date, forecast_date, need_output)
-elif (algo == "RF"):
-    print("%s ============ Algorithm is Random Forest ============" % (getCurrentTime()))
-    if (need_output == 1):
-        start_from = 0
-        user_cnt = 0
-        checking_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
-        forecast_date = checking_date + datetime.timedelta(1)
-        loadRecordsFromRedis(start_from, user_cnt)
-        RF.randomForest(user_cnt, checking_date, forecast_date, need_output)
-    else:
-        start = 0
-        user_cnt = 2000
-        checking_date = datetime.datetime.strptime("2014-12-05", "%Y-%m-%d").date()
-        forecast_date = checking_date + datetime.timedelta(1)
-        loadRecordsFromRedis(start, user_cnt)
-        RF.randomForest(user_cnt, checking_date, forecast_date, need_output)
-elif (algo == "GBDT")        :
-    print("%s ============ Algorithm is GBDT ============" % (getCurrentTime()))
-    start = 0
-    user_cnt = 0
-    checking_date = datetime.datetime.strptime("2014-12-05", "%Y-%m-%d").date()
-    forecast_date = checking_date + datetime.timedelta(1)
-    loadRecordsFromRedis(start, user_cnt)
-    GBDT.GradientBoostingRegressionTree(checking_date, forecast_date, need_output)
-
-
-
 print("=====================================================================")
 print("=========================  training...   ============================")
 print("=====================================================================")
 
 start_from = 0
-user_cnt = 0
+user_cnt = 500
 slide_windows_days = 10
+
+loadRecordsFromRedis(start_from, user_cnt)
 
 if (user_cnt == 0):
     window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
     final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
 else:
-    window_start_date = datetime.datetime.strptime("2014-12-02", "%Y-%m-%d").date()
-    final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
+    window_start_date = datetime.datetime.strptime("2014-12-05", "%Y-%m-%d").date()
+    final_end_date = datetime.datetime.strptime("2014-12-17", "%Y-%m-%d").date()
 
-window_end_date = window_start_date + datetime.timedelta(slide_windows_days)
-
-features_importance = None
-loadRecordsFromRedis(start_from, user_cnt)
 slide_windows_models = []
 
-#滑动窗口 11-18 -- 12-17 得到特征的重要性， 并保留每个滑动窗口训练出的的model
-while (window_end_date < final_end_date):    
-    slide_window_clf = GBDT.GBDT_slideWindows(window_start_date, window_end_date, True)
-    if (slide_window_clf == None):
-        window_end_date += datetime.timedelta(1)
-        window_start_date += datetime.timedelta(1)
-        continue
+# 若 cal_feature_importance = True， 则累加特征的重要性， 忽略 final_feature_importance
+# 若为 False，则 final_feature_importance 为累加好的特征重要性， 根据特征的重要性在滑动窗口内重新训练model
+slide_windows_models, feature_importance = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, True, None)
 
-    slide_windows_models.append(slide_window_clf)
-    print("type(slide_window_clf)", type(slide_window_clf))
+useful_features = 0
+logging.info("After split window, feature_importance is : ")
+for feature_name, idx in g_feature_info.items():
+    logging.info("%s : %f" % (feature_name, feature_importance[idx]))
+    if (feature_importance[idx] > 0):
+        useful_features += 1
 
-    if (features_importance is None):
-        features_importance = slide_window_clf.feature_importances_
-    else:
-        features_importance += slide_window_clf.feature_importances_
+print("=====================================================================")
+print("=================  training with feature importance(%d) =============" % useful_features)
+print("=====================================================================")
 
-    window_end_date += datetime.timedelta(1)
-    window_start_date += datetime.timedelta(1)
-
-logging.info("After split window, features_importance is %s" % features_importance)
-
-updateUsefulFeatures(features_importance)
+slide_windows_models, _ = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, False, feature_importance)
 
 nag_per_pos = 10
+
+window_end_date = final_end_date
+window_start_date = window_end_date - datetime.timedelta(slide_windows_days)
+
 
 # 根据滑动窗口的结果，使用重要性 > 0 的特征从 12-08 -- 12-17 生成特征矩阵以及12-18 的购买记录，交给滑动窗口
 # 训练出的model，生成叶节点，传给 LR 再进行训练， 最后使用 LR 从 12-09 -- 12-18 生成特征矩阵进行预测
@@ -286,17 +247,28 @@ print("=====================================================================")
 print("==============  generating weights %s - %s ==========" % (window_start_date, window_end_date))
 print("=====================================================================")
 
+
 # item 的热度
 print("        %s calculating popularity..." % getCurrentTime())
 #item_popularity_dict = calculate_item_popularity()
 item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
 print("        %s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
-
 samples_weight, Ymat_weight = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
+
+# samples_weight, Ymat_weight = takingSamplesForForecasting(window_start_date, window_end_date)
 
 # 使用重要性 > 0 的特征从 12-08 -- 12-17 生成特征矩阵
 print("        %s forecasting, reading feature matrix from %s -- %s" % (getCurrentTime(), window_start_date, window_end_date))
-Xmat_weight = GBDT.createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples_weight, item_popularity_dict, True)
+
+params = {'window_start_date' : window_start_date, 
+         'window_end_date' : window_end_date,
+         'nag_per_pos' : nag_per_pos, 
+         'samples' : samples_weight, 
+         'item_popularity_dict' : None, 
+         'cal_feature_importance' : False, 
+         'final_feature_importance' : feature_importance}
+
+Xmat_weight = GBDT.createTrainingSet(**params)
 Xmat_weight = preprocessing.scale(Xmat_weight)
 m, n = np.shape(Xmat_weight)
 print("        %s matrix for generating weights (%d, %d)" % (getCurrentTime(), m, n))
@@ -310,12 +282,13 @@ X_train, X_train_lr, Y_train, Y_train_lr = train_test_split(Xmat_weight,
 slide_windows_onehot = []
 # 滑动窗口训练出的model分别对12-08 -- 12-17的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
 X_train_features = Xmat_weight
-for clf_model in slide_windows_models:
+
+models_cnt = len(slide_windows_models)
+for model_idx, clf_model in enumerate(slide_windows_models):
     # grd_enc = OneHotEncoder()
     # grd_enc.fit(clf_model.apply(Xmat_weight)[:, :, 0])
     # slide_windows_onehot.append(grd_enc)
     #X_train_lr_enc = grd_enc.transform(clf_model.apply(Xmat_weight)).toarray()
-
     X_train_lr_enc = clf_model.apply(Xmat_weight)[:, :, 0]
     X_train_features = np.column_stack((X_train_features, X_train_lr_enc))
 
@@ -323,6 +296,7 @@ m, n = X_train_features.shape
 print("        %s X_train_features by split window models %d, %d " % (getCurrentTime(), m, n))
 
 # EnsembleModel
+print("        %s runing LR..." % (getCurrentTime()))
 logisticReg = LogisticRegression()
 logisticReg.fit(X_train_features, Ymat_weight)
 
@@ -336,10 +310,11 @@ params = {'n_estimators': 500,
 
 # # 使用GBDT 算法
 # gbdtRegressor = GradientBoostingRegressor(**params)
+print("        %s runing GBDT..." % (getCurrentTime()))
 gbdtRegressor = GradientBoostingClassifier(**params)
 gbdtRegressor.fit(X_train_features, Ymat_weight)
 
-
+print("        %s runing RF..." % (getCurrentTime()))
 rfcls = RandomForestClassifier(n_estimators=500)
 rfcls.fit(X_train_features, Ymat_weight)
 
@@ -351,19 +326,26 @@ print("=====================================================================")
 
 window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
 
-samples_forecast = takingSamplesForForecasting(window_start_date, forecast_date)
+samples_forecast, _ = takingSamplesForForecasting(window_start_date, forecast_date)
 
-Xmat_forecast = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, samples_forecast, item_popularity_dict, True)
+params = {'window_start_date' : window_start_date, 
+         'window_end_date' : forecast_date,
+         'nag_per_pos' : nag_per_pos, 
+         'samples' : samples_forecast, 
+         'item_popularity_dict' : None, 
+         'cal_feature_importance' : False, 
+         'final_feature_importance' : feature_importance}
+Xmat_forecast = GBDT.createTrainingSet(**params)
 Xmat_forecast = preprocessing.scale(Xmat_forecast)
+
 
 m, n = np.shape(Xmat_forecast)
 print("        %s matrix for generating forecast matrix (%d, %d)" % (getCurrentTime(), m, n))
 
 # 滑动窗口训练出的model分别对12-09 -- 12-18的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
 X_forecast_features = Xmat_forecast
-for i, clf_model in enumerate(slide_windows_models):
+for model_idx, clf_model in enumerate(slide_windows_models):
     # X_forecast_enc = slide_windows_onehot[i].transform(clf_model.apply(Xmat_forecast)).toarray()
-
     X_forecast_enc =clf_model.apply(Xmat_forecast)[:, :, 0]    
     X_forecast_features = np.column_stack((X_forecast_features, X_forecast_enc))
 
@@ -377,6 +359,7 @@ findal_predicted_prob += gbdtRegressor.predict_proba(X_forecast_features)
 findal_predicted_prob += rfcls.predict_proba(X_forecast_features)
 
 topK = 1000
+min_proba = 0.6
 
 if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()):
 
@@ -391,7 +374,6 @@ if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
     print("%s probility of top1 = %.4f, top%d = %.4f" % 
           (getCurrentTime(), findal_predicted_prob[prob_desc[0], 1], topK, findal_predicted_prob[prob_desc[topK], 1] ))
 
-    min_proba = 0.6
 
     file_idx = 0
     output_file_name = "%s\\..\\output\\forecast.GBDT.LR.%s.%d.csv" % (runningPath, datetime.date.today(), file_idx)
@@ -406,6 +388,11 @@ if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
     #     if (predicted_prob[index][1] >= min_proba):
     #         outputFile.write("%s,%s\n" % (samples_forecast[index][0], samples_forecast[index][1]))
     for index in range(topK):
+        if (findal_predicted_prob[prob_desc[index], 1] < min_proba):
+            print("        %s probability %.4f < min_proba %.4f, breaking..." %
+                  (getCurrentTime(), findal_predicted_prob[prob_desc[index], 1], min_proba))
+            break
+
         outputFile.write("%s,%s\n" %
             (samples_forecast[prob_desc[index]][0], samples_forecast[prob_desc[index]][1]))
         logging.info("prediction probability (%s,%s) =  %.4f" % 
@@ -416,5 +403,18 @@ if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
 else:
     verify_user_start = start_from + user_cnt
     verify_user_cnt = user_cnt
-    verify.verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos, verify_user_start, verify_user_cnt, topK,
-                                         slide_windows_models, logisticReg, gbdtRegressor, rfcls)
+
+    params = {'window_start_date' : window_start_date,
+              'forecast_date': forecast_date, 
+              'nag_per_pos' : nag_per_pos, 
+              'verify_user_start' : verify_user_start, 
+              'verify_user_cnt' : verify_user_cnt, 
+              'topK' : topK, 
+              'min_proba' : min_proba, 
+              'slide_windows_models' : slide_windows_models, 
+              'logisticReg' : logisticReg, 
+              'gbdtRegressor' : gbdtRegressor, 
+              'rfcls' : rfcls, 
+              'final_feature_importance' : feature_importance}
+
+    verify.verifyPredictionEnsembleModel(**params)

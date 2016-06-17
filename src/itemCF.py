@@ -92,7 +92,7 @@ def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, v
 
     item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
 
-    verify_samples = takingSamplesForForecasting(window_start_date, forecast_date)
+    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date)
     
     print("%s creating verifying feature matrix..." % (getCurrentTime()))
     Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, item_popularity_dict, False)

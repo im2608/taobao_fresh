@@ -1,22 +1,24 @@
+﻿# -*- coding: utf-8 -*-
+
 from common import *
 import math
 
-#记录的用户在item上的购买行为
+#è®°å½•çš„ç”¨æˆ·åœ¨itemä¸Šçš„è´­ä¹°è¡Œä¸º
 g_user_buy_transection = dict()
 
-#用于验证的用户购买行为
+#ç”¨äºŽéªŒè¯�çš„ç”¨æˆ·è´­ä¹°è¡Œä¸º
 g_user_buy_transection_verify = dict()
 
 
-#最终的预测结果
+#æœ€ç»ˆçš„é¢„æµ‹ç»“æžœ
 g_final_forecast = dict()
 g_buy_record_cnt_forecast = 0.0
 
-#在用户的操作记录中，从最后一条购买记录到train时间结束之间的操作行为记录，
-#以它们作为patten
+#åœ¨ç”¨æˆ·çš„æ“�ä½œè®°å½•ä¸­ï¼Œä»Žæœ€å�Žä¸€æ�¡è´­ä¹°è®°å½•åˆ°trainæ—¶é—´ç»“æ�Ÿä¹‹é—´çš„æ“�ä½œè¡Œä¸ºè®°å½•ï¼Œ
+#ä»¥å®ƒä»¬ä½œä¸ºpatten
 g_user_behavior_patten = dict()
 
-#总共的购买记录数
+#æ€»å…±çš„è´­ä¹°è®°å½•æ•°
 g_buy_record_cnt = 0
 g_min_support = 0.0
 g_buy_record_cnt_verify = 0.0
@@ -67,11 +69,11 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
         if (item_id not in user_behavior_record[user_id]):
             user_behavior_record[user_id][item_id] = []
 
-        #用户在某个 item id 上的每个操作以（操作类型，操作时间） 的二元组表示
-        #user_behavior_seq 为该二元组序列，按照时间排序，相同时间的按照1，2，3，4排序
+        #ç”¨æˆ·åœ¨æŸ�ä¸ª item id ä¸Šçš„æ¯�ä¸ªæ“�ä½œä»¥ï¼ˆæ“�ä½œç±»åž‹ï¼Œæ“�ä½œæ—¶é—´ï¼‰ çš„äºŒå…ƒç»„è¡¨ç¤º
+        #user_behavior_seq ä¸ºè¯¥äºŒå…ƒç»„åº�åˆ—ï¼ŒæŒ‰ç…§æ—¶é—´æŽ’åº�ï¼Œç›¸å�Œæ—¶é—´çš„æŒ‰ç…§1ï¼Œ2ï¼Œ3ï¼Œ4æŽ’åº�
         user_behavior_seq = user_behavior_record[user_id][item_id]
         seq_len = len(user_behavior_seq)
-        #按照操作时间生成操作序列
+        #æŒ‰ç…§æ“�ä½œæ—¶é—´ç”Ÿæˆ�æ“�ä½œåº�åˆ—
         if (seq_len == 0):
             user_behavior_seq.append((behavior_type, behavior_time))
         else:
@@ -89,19 +91,19 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
 
     verify_date = datetime.date(2014, 12, 18)
 
-    #根据操作序列得到用户的购买记录，以及pattern
+    #æ ¹æ�®æ“�ä½œåº�åˆ—å¾—åˆ°ç”¨æˆ·çš„è´­ä¹°è®°å½•ï¼Œä»¥å�Špattern
     print("%s getting user buy records" % getCurrentTime())
     index = 0
     total_user = len(user_behavior_record)
-    for user_id, item_id_list in user_behavior_record.items(): #用户， 该用户在哪些 item 上有操作
+    for user_id, item_id_list in user_behavior_record.items(): #ç”¨æˆ·ï¼Œ è¯¥ç”¨æˆ·åœ¨å“ªäº› item ä¸Šæœ‰æ“�ä½œ
 
         for item_id, behavior_seq in item_id_list.items(): 
-            #用户在某个 item 上只有一次非购物操作，略过
+            #ç”¨æˆ·åœ¨æŸ�ä¸ª item ä¸Šå�ªæœ‰ä¸€æ¬¡é�žè´­ç‰©æ“�ä½œï¼Œç•¥è¿‡
             if (len(behavior_seq) == 1 and behavior_seq[0][0] != BEHAVIOR_TYPE_BUY):
                 continue
 
-            #用户购买记录，按照时间排序，相同时间的话，1，2，3在前，4在后
-            #将连续的行为压缩成 {behavior：count}的形式
+            #ç”¨æˆ·è´­ä¹°è®°å½•ï¼ŒæŒ‰ç…§æ—¶é—´æŽ’åº�ï¼Œç›¸å�Œæ—¶é—´çš„è¯�ï¼Œ1ï¼Œ2ï¼Œ3åœ¨å‰�ï¼Œ4åœ¨å�Ž
+            #å°†è¿žç»­çš„è¡Œä¸ºåŽ‹ç¼©æˆ� {behaviorï¼šcount}çš„å½¢å¼�
             #[1,1,1,2,3,4] => [((1, time), 3), ((2, time), 1), ((3, time), 1), ((4, time), 1)]
             sorted_seq = sortAndCompressBuyRecord(behavior_seq)
 
@@ -115,19 +117,19 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
                 if (behavior_type != BEHAVIOR_TYPE_BUY):
                     continue
 
-                #有些购物记录没有任何浏览记录，跳过
+                #æœ‰äº›è´­ç‰©è®°å½•æ²¡æœ‰ä»»ä½•æµ�è§ˆè®°å½•ï¼Œè·³è¿‡
                 if (len(user_buy_record) == 0):
                     g_buy_record_cnt += 1
                     skiped_buy_cnt += 1
                     continue
 
                 for idx in range(len(user_buy_record)):
-                    #重新生成新的三元组 (操作类型， 操作时间 2014-01-23， 操作次数)
+                    #é‡�æ–°ç”Ÿæˆ�æ–°çš„ä¸‰å…ƒç»„ (æ“�ä½œç±»åž‹ï¼Œ æ“�ä½œæ—¶é—´ 2014-01-23ï¼Œ æ“�ä½œæ¬¡æ•°)
                     user_buy_record[idx] = (user_buy_record[idx][0][0], \
                                             convertDatatimeToStr(user_buy_record[idx][0][1]),\
                                             user_buy_record[idx][1])
 
-                #如果有连续的购买，则为每个购买行为生成一条购物记录
+                #å¦‚æžœæœ‰è¿žç»­çš„è´­ä¹°ï¼Œåˆ™ä¸ºæ¯�ä¸ªè´­ä¹°è¡Œä¸ºç”Ÿæˆ�ä¸€æ�¡è´­ç‰©è®°å½•
                 buy_cnt = behavior_consecutive[1]
 
                 if (need_verify and behavior_time.date() == verify_date):
@@ -137,12 +139,12 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
                     if (item_id not in g_user_buy_transection_verify[user_id]):
                         g_user_buy_transection_verify[user_id][item_id] = []
 
-                    #用于验证的用户购买行为
+                    #ç”¨äºŽéªŒè¯�çš„ç”¨æˆ·è´­ä¹°è¡Œä¸º
                     for each_buy in range(buy_cnt):
                         g_user_buy_transection_verify[user_id][item_id].append(user_buy_record.copy())
                         g_buy_record_cnt += 1
                 else:
-                    #用户的购买记录
+                    #ç”¨æˆ·çš„è´­ä¹°è®°å½•
                     if (user_id not in g_user_buy_transection):
                         g_user_buy_transection[user_id] = dict()
                 
@@ -163,7 +165,7 @@ def loadDataAndSaveToRedis(need_verify = True, user_opt_file_name = tianchi_fres
                     g_user_behavior_patten[user_id][item_id] = []
 
                 for idx in range(len(user_buy_record)):                
-                    #重新生成新的三元组
+                    #é‡�æ–°ç”Ÿæˆ�æ–°çš„ä¸‰å…ƒç»„
                     user_buy_record[idx] = (user_buy_record[idx][0][0], \
                                             convertDatatimeToStr(user_buy_record[idx][0][1]),\
                                             user_buy_record[idx][1])
@@ -286,7 +288,7 @@ def saveRecordstoRedis():
 
     return 0
 
-# 每条购物记录在 redis 中都表现为字符串 
+# æ¯�æ�¡è´­ç‰©è®°å½•åœ¨ redis ä¸­éƒ½è¡¨çŽ°ä¸ºå­—ç¬¦ä¸² 
 #"[ [(1, 2014-01-01 23, 35), (2, 2014-01-02 22, 1)], [(1, 2014-01-02 23, 35), (2, 2014-01-03 14, 1)] ]"
 def loadRecordsFromRedis(min_suport_factor, need_verify):
     global g_buy_record_cnt
@@ -294,21 +296,21 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
     global g_buy_record_cnt_verify
     global g_pattern_cnt
 
-    # 得到所有的用户
+    # å¾—åˆ°æ‰€æœ‰çš„ç”¨æˆ·
     all_users = redis_cli.get("all_users").decode()
     all_users = all_users.split(",")
 
     total_user = len(all_users)
     print("%s loadRecordsFromRedis, here total %d users" % (getCurrentTime(), total_user))
 
-    #根据用户得到用户操作过的item id
+    #æ ¹æ�®ç”¨æˆ·å¾—åˆ°ç”¨æˆ·æ“�ä½œè¿‡çš„item id
     user_index = 0
     skiped_user = 0
     for user_id in all_users:
         if (user_id != '100673077'):
             continue
 
-        #读取购物记录
+        #è¯»å�–è´­ç‰©è®°å½•
         g_user_buy_transection[user_id] = dict()
 
         user_whole_info = redis_cli.hgetall(user_id)
@@ -325,7 +327,7 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
             user_index += 1
             skiped_user += 1
 
-        #得到用户的patterns
+        #å¾—åˆ°ç”¨æˆ·çš„patterns
         tmp = bytes("item_id_pattern".encode())
         if tmp not in user_whole_info:
             continue
@@ -342,7 +344,7 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
             tmp = item_id + "_pattern"
             item_pattern = user_whole_info[bytes(tmp.encode())].decode()
             user_item_pattern = getRecordsFromRecordString(item_pattern)
-            # 对于pattern 来说在每个 item_id 上只会有一条，所以直接用 [0]
+            # å¯¹äºŽpattern æ�¥è¯´åœ¨æ¯�ä¸ª item_id ä¸Šå�ªä¼šæœ‰ä¸€æ�¡ï¼Œæ‰€ä»¥ç›´æŽ¥ç”¨ [0]
             for behavior_consecutive in user_item_pattern[0]:
                 if (behavior_consecutive not in g_user_behavior_patten):
                     g_user_behavior_patten[behavior_consecutive] = set()
@@ -367,19 +369,19 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
     if (not need_verify):
         return
 
-    # 得到用于验证的用户
+    # å¾—åˆ°ç”¨äºŽéªŒè¯�çš„ç”¨æˆ·
     all_users_verify = redis_cli.get("all_users_verify").decode()
     all_users_verify = all_users_verify.split(",")
 
     total_user = len(all_users_verify)
     idx = 0
 
-    #读取用于验证的购物记录
+    #è¯»å�–ç”¨äºŽéªŒè¯�çš„è´­ç‰©è®°å½•
     for user_id in all_users_verify:
         if (user_id != '100673077'):
             continue
 
-        #读取用于验证的购物记录
+        #è¯»å�–ç”¨äºŽéªŒè¯�çš„è´­ç‰©è®°å½•
         g_user_buy_transection_verify[user_id] = set()
 
         user_whole_info = redis_cli.hgetall(user_id)
@@ -405,7 +407,7 @@ def loadRecordsFromRedis(min_suport_factor, need_verify):
     #logginBuyRecords()
     return 0
 
-#用户购买记录，按照时间排序，相同时间的情况下，1，2，3排在前，4在后
+#ç”¨æˆ·è´­ä¹°è®°å½•ï¼ŒæŒ‰ç…§æ—¶é—´æŽ’åº�ï¼Œç›¸å�Œæ—¶é—´çš„æƒ…å†µä¸‹ï¼Œ1ï¼Œ2ï¼Œ3æŽ’åœ¨å‰�ï¼Œ4åœ¨å�Ž
 def sortAndCompressBuyRecord(user_buy_record):
     sorted_compressed_behavior = []
 
@@ -440,11 +442,11 @@ def sortAndCompressBuyRecord(user_buy_record):
 
     return sorted_compressed_behavior
 
-#以单项形式得到所有的 behavior_consecutive, C1 保存了 behavior consecutive 以及对应的 support
+#ä»¥å�•é¡¹å½¢å¼�å¾—åˆ°æ‰€æœ‰çš„ behavior_consecutive, C1 ä¿�å­˜äº† behavior consecutive ä»¥å�Šå¯¹åº”çš„ support
 def createC1():
     print("%s creating C1" % getCurrentTime())
     C1 = {}
-    #记录每个 behavior_consecutive 出现在哪些购物记录中，用三元组表示 set( (user id, category, record num), (user id, category, record num) )
+    #è®°å½•æ¯�ä¸ª behavior_consecutive å‡ºçŽ°åœ¨å“ªäº›è´­ç‰©è®°å½•ä¸­ï¼Œç”¨ä¸‰å…ƒç»„è¡¨ç¤º set( (user id, category, record num), (user id, category, record num) )
     C1_appearance = {}
     C1_support = {}
     for user_id, item_id_buy in g_user_buy_transection.items():
@@ -465,14 +467,14 @@ def createC1():
 
     return C1, C1_appearance
 
-# 统计每个购买记录中的behavior consecutive 总的出现次数（包括 buy record and pattern)
+# ç»Ÿè®¡æ¯�ä¸ªè´­ä¹°è®°å½•ä¸­çš„behavior consecutive æ€»çš„å‡ºçŽ°æ¬¡æ•°ï¼ˆåŒ…æ‹¬ buy record and pattern)
 def createC1Ex():
     print("%s creating C1" % getCurrentTime())
 
-    # 每个 behavior consecutive 在 buy records 中的出现次数， 即支持度
+    # æ¯�ä¸ª behavior consecutive åœ¨ buy records ä¸­çš„å‡ºçŽ°æ¬¡æ•°ï¼Œ å�³æ”¯æŒ�åº¦
     C1 = {}
 
-    # 每个购买记录中的behavior consecutive 在整个数据集中出现的次数
+    # æ¯�ä¸ªè´­ä¹°è®°å½•ä¸­çš„behavior consecutive åœ¨æ•´ä¸ªæ•°æ�®é›†ä¸­å‡ºçŽ°çš„æ¬¡æ•°
     C1_total = {}
 
     for user_id, item_id_buy in g_user_buy_transection.items():
@@ -498,12 +500,12 @@ def outputC1Support(C1):
     for behavior_consecutive, support in C1.items():
         logging.info("%s, %d" % (behavior_consecutive, support))
     return 0
-#从Ck中的每一项都是一个[], [] 中包含一个或多个 behavior_consecutive， 查找这些behavior_consecutive的组合是否满足minsupoprt
-# ssCnt 的结构为：
-#  |<----                 frequence item                                                       -------->|  |<-- 支持度
+#ä»ŽCkä¸­çš„æ¯�ä¸€é¡¹éƒ½æ˜¯ä¸€ä¸ª[], [] ä¸­åŒ…å�«ä¸€ä¸ªæˆ–å¤šä¸ª behavior_consecutiveï¼Œ æŸ¥æ‰¾è¿™äº›behavior_consecutiveçš„ç»„å�ˆæ˜¯å�¦æ»¡è¶³minsupoprt
+# ssCnt çš„ç»“æž„ä¸ºï¼š
+#  |<----                 frequence item                                                       -------->|  |<-- æ”¯æŒ�åº¦
 #  |  |<---    behavior_consecutive            ---->|  |<---        behavior_consecutive        ---->|  |  |
-# [[  [(3, datetime.datetime(2014, 12, 14, 7, 0)), 1]， [(4, datetime.datetime(2014, 12, 14, 7, 0)), 1]  ], 1]
-#       3:操作类型， datetime.datetime(2014, 12, 14, 7, 0)： 操作时间， 1： 操作次数
+# [[  [(3, datetime.datetime(2014, 12, 14, 7, 0)), 1]ï¼Œ [(4, datetime.datetime(2014, 12, 14, 7, 0)), 1]  ], 1]
+#       3:æ“�ä½œç±»åž‹ï¼Œ datetime.datetime(2014, 12, 14, 7, 0)ï¼š æ“�ä½œæ—¶é—´ï¼Œ 1ï¼š æ“�ä½œæ¬¡æ•°
 
 def scanMinSupportForC1(C1):
     tmp_C1 = []
@@ -534,7 +536,7 @@ def scanMinSupportWithC1appearance(Ck, k, C1_appearance):
        
     return retList
 
-#计算若干 behavior_consecutive 的组合同时出现在哪些 buy records 中
+#è®¡ç®—è‹¥å¹² behavior_consecutive çš„ç»„å�ˆå�Œæ—¶å‡ºçŽ°åœ¨å“ªäº› buy records ä¸­
 def getRecordsContainItems(behavior_consecutives, C1_appearance):
     item_in_records = set()
     for each_behavior in behavior_consecutives:
@@ -545,11 +547,11 @@ def getRecordsContainItems(behavior_consecutives, C1_appearance):
 
     return item_in_records
 
-# Lk 内每个元素均为k-1项， 将它们合并成 k 项
-# 若有两个k-1项集，每个项集按照“属性-值”（一般按值）的字母顺序进行排序。
-# 如果两个k-1项集的前k-2个项相同，而最后一个项不同，则证明它们是可连接的，即两这个k-1项集可以连接，即可连接生成 k 项集。
-# 使如有两个3项集：｛a, b, c｝{a, b, d}，这两个3项集就是可连接的，它们可以连接生成4项集｛a, b, c, d｝。
-# 又如两个3项集｛a, b, c｝｛a, d, e｝，这两个3项集是不能连接生成3项集的。
+# Lk å†…æ¯�ä¸ªå…ƒç´ å�‡ä¸ºk-1é¡¹ï¼Œ å°†å®ƒä»¬å�ˆå¹¶æˆ� k é¡¹
+# è‹¥æœ‰ä¸¤ä¸ªk-1é¡¹é›†ï¼Œæ¯�ä¸ªé¡¹é›†æŒ‰ç…§â€œå±žæ€§-å€¼â€�ï¼ˆä¸€èˆ¬æŒ‰å€¼ï¼‰çš„å­—æ¯�é¡ºåº�è¿›è¡ŒæŽ’åº�ã€‚
+# å¦‚æžœä¸¤ä¸ªk-1é¡¹é›†çš„å‰�k-2ä¸ªé¡¹ç›¸å�Œï¼Œè€Œæœ€å�Žä¸€ä¸ªé¡¹ä¸�å�Œï¼Œåˆ™è¯�æ˜Žå®ƒä»¬æ˜¯å�¯è¿žæŽ¥çš„ï¼Œå�³ä¸¤è¿™ä¸ªk-1é¡¹é›†å�¯ä»¥è¿žæŽ¥ï¼Œå�³å�¯è¿žæŽ¥ç”Ÿæˆ� k é¡¹é›†ã€‚
+# ä½¿å¦‚æœ‰ä¸¤ä¸ª3é¡¹é›†ï¼šï½›a, b, cï½�{a, b, d}ï¼Œè¿™ä¸¤ä¸ª3é¡¹é›†å°±æ˜¯å�¯è¿žæŽ¥çš„ï¼Œå®ƒä»¬å�¯ä»¥è¿žæŽ¥ç”Ÿæˆ�4é¡¹é›†ï½›a, b, c, dï½�ã€‚
+# å�ˆå¦‚ä¸¤ä¸ª3é¡¹é›†ï½›a, b, cï½�ï½›a, d, eï½�ï¼Œè¿™ä¸¤ä¸ª3é¡¹é›†æ˜¯ä¸�èƒ½è¿žæŽ¥ç”Ÿæˆ�3é¡¹é›†çš„ã€‚
 def aprioriGen(Lk, K):
     logging.info(" aprioriGen length L%d is %d" %  (K-1, len(Lk)))
     retList = []
@@ -562,7 +564,7 @@ def aprioriGen(Lk, K):
 
             canMerge = True
             item_len = len(Lk[i])
-            #两个k-1项集的前k-2个项相同，而最后一个项不同, 才可合并
+            #ä¸¤ä¸ªk-1é¡¹é›†çš„å‰�k-2ä¸ªé¡¹ç›¸å�Œï¼Œè€Œæœ€å�Žä¸€ä¸ªé¡¹ä¸�å�Œ, æ‰�å�¯å�ˆå¹¶
             for idx in range(item_len - 1):
                 if (Lk[i][idx] != Lk[j][idx]):
                     canMerge = False
@@ -572,12 +574,12 @@ def aprioriGen(Lk, K):
                 #logging.debug("Can not mrege: Lk[%d] %s, Lk[%d] %s" %(i, Lk[i], j, Lk[j]))
                 continue
 
-            #前 k-2 项都相等，直接merge
+            #å‰� k-2 é¡¹éƒ½ç›¸ç­‰ï¼Œç›´æŽ¥merge
             newItem = []
             for idx in range(item_len - 1):
                 newItem.append(Lk[i][idx])
 
-            #合并最后一项
+            #å�ˆå¹¶æœ€å�Žä¸€é¡¹
             if (Lk[i][item_len - 1][0] <= Lk[j][item_len - 1][0]):
                 newItem.append(Lk[i][item_len - 1])
                 newItem.append(Lk[j][item_len - 1])
@@ -595,7 +597,7 @@ def Bayes(need_verify):
     total_records = g_buy_record_cnt + g_pattern_cnt
     buy_posibility = g_buy_record_cnt / total_records
     
-    #C1_total 是 C1 的子集， 意思是出现在 buy records 中的 behavior consecutive 不一定出现在 patterns 中
+    #C1_total æ˜¯ C1 çš„å­�é›†ï¼Œ æ„�æ€�æ˜¯å‡ºçŽ°åœ¨ buy records ä¸­çš„ behavior consecutive ä¸�ä¸€å®šå‡ºçŽ°åœ¨ patterns ä¸­
     C1, C1_total = createC1Ex()
     print("%s calculating Bayes P(B|A) = P(A|B)*P(B)/P(A)" % getCurrentTime())
 
@@ -675,11 +677,11 @@ def aprioriAlgorithm():
     L = [ [[key] for key in L1_keys] ]    
     k = 2
     while (len(L[k-2]) > 0):
-        #将k-1 项合并成k 项
+        #å°†k-1 é¡¹å�ˆå¹¶æˆ�k é¡¹
         Ck = aprioriGen(L[k-2], k)
         print("%s C%d has %d items " % (getCurrentTime(), k, len(Ck)))
 
-        #检查 k 项列表中有哪些符合最小支持度
+        #æ£€æŸ¥ k é¡¹åˆ—è¡¨ä¸­æœ‰å“ªäº›ç¬¦å�ˆæœ€å°�æ”¯æŒ�åº¦
         Lk = scanMinSupportWithC1appearance(Ck, k, C1_appearance)
         print("%s C%d has %d items meet min support" % (getCurrentTime(), k, len(Lk)))
 
@@ -740,9 +742,9 @@ def matchPatternAndFrequentItem(frequent_item, factor, need_verify):
     total_forecastd_buy = 0
     for i in range(0, len(frequent_item)):
         for each_fre_item in frequent_item[i]:
-            #查找每个频繁项出现在哪些 user patterns 中
-            # user_item_patterns 为 set({(user1, item_id1}, (user2, item_id2)}), 表示频繁项符合 user 在
-            # item 上的 pattern
+            #æŸ¥æ‰¾æ¯�ä¸ªé¢‘ç¹�é¡¹å‡ºçŽ°åœ¨å“ªäº› user patterns ä¸­
+            # user_item_patterns ä¸º set({(user1, item_id1}, (user2, item_id2)}), è¡¨ç¤ºé¢‘ç¹�é¡¹ç¬¦å�ˆ user åœ¨
+            # item ä¸Šçš„ pattern
             user_item_patterns = getRecordsContainItems(each_fre_item, g_user_behavior_patten)
             for user_item in user_item_patterns:
                 if (user_item[1] not in global_train_item):

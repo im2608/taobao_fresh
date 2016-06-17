@@ -1,6 +1,6 @@
 from common import *
 import numpy as np
-
+from feature_selection import *
 
 
 
@@ -10,9 +10,9 @@ import numpy as np
 
 
 #在 [windw_start_date, window_end_dat) 范围内， user 对 category 购买间隔的平均天数以及方差
-def feature_mean_days_between_buy_user_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+def feature_mean_days_between_buy_user_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     feature_name = "feature_mean_days_between_buy_user_category"
-    if (not during_training and feature_name not in g_useful_feature_info):
+    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
         logging.info("%s has no useful features" % feature_name)
         return None, 0
 
@@ -68,8 +68,8 @@ def feature_mean_days_between_buy_user_category(window_start_date, window_end_da
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    if (during_training):
-        g_feature_info[cur_total_feature_cnt] = feature_name
+    if (cal_feature_importance):
+        g_feature_info[feature_name] = cur_total_feature_cnt
 
     return buy_mean_days_list, 2
 
@@ -78,9 +78,9 @@ def feature_mean_days_between_buy_user_category(window_start_date, window_end_da
 ######################################################################################################
 
 #[window_start_date, window_end_date) 时间内， 用户一共购买过多少同类型的商品
-def feature_how_many_buy_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+def feature_how_many_buy_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     feature_name = "feature_how_many_buy_category"
-    if (not during_training and feature_name not in g_useful_feature_info):
+    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
         logging.info("%s has no useful features" % feature_name)
         return None, 0
 
@@ -115,8 +115,8 @@ def feature_how_many_buy_category(window_start_date, window_end_date, user_item_
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    if (during_training):
-        g_feature_info[cur_total_feature_cnt] = feature_name
+    if (cal_feature_importance):
+        g_feature_info[feature_name] = cur_total_feature_cnt
 
     return how_many_buy, 1
 
@@ -152,14 +152,14 @@ def get_last_opt_category_date(user_records, window_start_date, window_end_date,
 
 # 用户最后一次操作同类型的商品至 window_end_date （不包括） 的天数，返回4个特征
 # todo： 此处有个问题： 如果用户连续购买了同一个item，则此处会有多条相同的购物记录，但是函数中没有处理这种情况
-def feature_last_opt_category(window_start_date, window_end_date, user_item_pairs, during_training, cur_total_feature_cnt):
+def feature_last_opt_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     features_names = ["feature_last_opt_category_view", 
                       "feature_last_opt_category_fav", 
                       "feature_last_opt_category_cart", 
                       "feature_last_opt_category_buy"]
     useful_features = None
-    if (not during_training):
-        useful_features = featuresForForecasting(features_names)
+    if (not cal_feature_importance):
+        useful_features = featuresForForecasting(features_names, final_feature_importance)
         if (len(useful_features) == 0):
             logging.info("During forecasting, [feature_last_opt_category] has no useful features")
             return None, 0
@@ -198,7 +198,7 @@ def feature_last_opt_category(window_start_date, window_end_date, user_item_pair
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    return getUsefulFeatures(during_training, cur_total_feature_cnt, days_from_last_opt_cat_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, days_from_last_opt_cat_list, features_names, useful_features)
 
 
 ######################################################################################################
