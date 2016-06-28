@@ -78,14 +78,17 @@ def feature_beahvior_cnt_on_item(pre_days, window_end_date, user_behavior_cnt_on
                       "feature_beahvior_cnt_on_item_%d_fav" % pre_days,
                       "feature_beahvior_cnt_on_item_%d_cart" % pre_days,
                       "feature_beahvior_cnt_on_item_%d_buy" % pre_days,
+
                       "feature_beahvior_cnt_on_item_%d_view_mean" % pre_days, 
                       "feature_beahvior_cnt_on_item_%d_fav_mean" % pre_days,
                       "feature_beahvior_cnt_on_item_%d_cart_mean" % pre_days,
                       "feature_beahvior_cnt_on_item_%d_buy_mean" % pre_days,
+
                       "feature_beahvior_cnt_on_item_%d_view_var" % pre_days, 
                       "feature_beahvior_cnt_on_item_%d_fav_var" % pre_days,
                       "feature_beahvior_cnt_on_item_%d_cart_var" % pre_days,
-                      "feature_beahvior_cnt_on_item_%d_buy_var" % pre_days,                      
+                      "feature_beahvior_cnt_on_item_%d_buy_var" % pre_days, 
+
                       "feature_user_beahvior_cnt_on_item_ratio_%d_view" % pre_days,
                       "feature_user_beahvior_cnt_on_item_ratio_%d_fav" % pre_days,
                       "feature_user_beahvior_cnt_on_item_ratio_%d_cart" % pre_days,
@@ -109,6 +112,7 @@ def feature_beahvior_cnt_on_item(pre_days, window_end_date, user_behavior_cnt_on
 
     total_cnt = len(user_item_pairs)
     for index in range(len(user_item_pairs)):
+        user_id = user_item_pairs[index][0]
         item_id = user_item_pairs[index][1]
 
         if (item_id in item_behavior_cnt_dict):
@@ -134,7 +138,7 @@ def feature_beahvior_cnt_on_item(pre_days, window_end_date, user_behavior_cnt_on
         item_behavior_cnt_dict[item_id] = behavior_cnt_mean_var_ratio
         item_behavior_cnt_list[index] = behavior_cnt_mean_var_ratio
 
-        # logging.info("item %s, behavior cnt, mean, var %s" % (item_id, behavior_cnt_mean_var_ratio))
+        # logging.info("item %s, user %s, %s, behavior cnt, mean, var %s" % (item_id, user_id, user_behavior_cnt_on_item[index], behavior_cnt_mean_var_ratio))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 

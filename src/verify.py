@@ -118,10 +118,10 @@ def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, v
 
     item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
 
-    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date)
+    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date, False)
     
     print("%s creating verifying feature matrix..." % (getCurrentTime()))
-    Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, item_popularity_dict, False)
+    Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, False)
     Xmat_verify = preprocessing.scale(Xmat_verify)
 
     X_leaves_verify = grd_enc.transform(clf.apply(Xmat_verify))
@@ -150,12 +150,20 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
     print("%s reloading verifying users..." % (getCurrentTime()))
     loadRecordsFromRedis(verify_user_start, verify_user_cnt)
 
-    item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
+    # item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
 
-    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date)
+    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date, False)
 
     print("%s creating verifying feature matrix..." % (getCurrentTime()))
-    Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, item_popularity_dict, False, final_feature_importance)
+
+    params = {'window_start_date' : window_start_date, 
+             'window_end_date' : forecast_date,
+             'nag_per_pos' : nag_per_pos, 
+             'samples' : verify_samples, 
+             'cal_feature_importance' : True, 
+             'final_feature_importance' : final_feature_importance}
+
+    Xmat_verify = GBDT.createTrainingSet(**params)
     Xmat_verify = preprocessing.scale(Xmat_verify)
 
     X_verify_features = Xmat_verify
@@ -176,9 +184,7 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
     # 按照 probability 降序排序
     prob_desc = np.argsort(-findal_predicted_prob[:, 1])
 
-    if (len(verify_samples) > 1000):
-        topK = 1000
-    else:
+    if (len(verify_samples) < topK):
         topK = round(len(verify_samples) / 2)
 
     print("%s probility of top1 = %.4f, top%d = %.4f" % 
@@ -194,7 +200,7 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
         user_item = verify_samples[prob_desc[index]]
         predicted_user_item.append(user_item)
 
-    actual_user_item = takingPositiveSamples(forecast_date)
+    actual_user_item = takingPositiveSamplesOnDate(forecast_date)
 
     calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
     return 

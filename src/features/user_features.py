@@ -8,8 +8,9 @@ from feature_selection import *
 ################################  数据集中，用户的特征  ##############################################
 ####################################################################################################
 
-# 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车的比率
-def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+# 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车, 购物车/收藏， 购物车/浏览的比率,
+# 返回 13 个特征
+def feature_how_many_behavior_user(pre_days, end_date, user_behavior_cnt_on_item, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     begin_date = end_date - datetime.timedelta(pre_days)
     logging.info("entered feature_how_many_behavior_user(%s, %s)" % (begin_date, end_date))
 
@@ -17,9 +18,19 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feat
                       "feature_how_many_behavior_user_fav_%d" % pre_days,
                       "feature_how_many_behavior_user_cart_%d" % pre_days,
                       "feature_how_many_behavior_user_buy_%d" % pre_days,
+
                       "feature_how_many_behavior_user_buy_view_ratio_%d" % pre_days,
                       "feature_how_many_behavior_user_buy_fav_ratio_%d" % pre_days,
-                      "feature_how_many_behavior_user_buy_cart_ratio_%d" % pre_days]
+                      "feature_how_many_behavior_user_buy_cart_ratio_%d" % pre_days,
+
+                      "feature_how_many_behavior_user_cart_view_ratio_%d" % pre_days,
+                      "feature_how_many_behavior_user_cart_fav_ratio_%d" % pre_days,
+
+                      "feature_how_many_behavior_user_item_view_ratio_%d" % pre_days,
+                      "feature_how_many_behavior_user_item_fav_ratio_%d" % pre_days,
+                      "feature_how_many_behavior_user_item_cart_ratio_%d" % pre_days,
+                      "feature_how_many_behavior_user_item_buy_ratio_%d" % pre_days
+                      ]
 
     useful_features = None
     if (not cal_feature_importance):
@@ -30,7 +41,7 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feat
         else:
             logging.info("During forecasting, [feature_how_many_behavior_user] has %d useful features" % len(useful_features))
 
-    features = 7
+    features = len(features_names)
 
     how_many_behavior_list = np.zeros((len(user_item_pairs), features))
     how_many_behavior_dict = dict()
@@ -42,15 +53,16 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feat
             how_many_behavior_list[index] = how_many_behavior_dict[user_id]
             continue
 
-        #前4 个为浏览，收藏，购物车, 购买的数量， 后3个为比例
+        #前4 个为浏览，收藏，购物车, 购买的数量， 后5个为比例
         behavior_cnt = [0 for x in range(features)]
 
-        for item_id, item_buy_records in g_user_buy_transection[user_id].items():
-            for each_record in item_buy_records:
-                for each_behavior in each_record:
-                    if (each_behavior[1].date() >= begin_date and \
-                        each_behavior[1].date() < end_date):
-                        behavior_cnt[each_behavior[0] - 1] += each_behavior[2]
+        if (user_id in g_user_buy_transection):
+            for item_id, item_buy_records in g_user_buy_transection[user_id].items():
+                for each_record in item_buy_records:
+                    for each_behavior in each_record:
+                        if (each_behavior[1].date() >= begin_date and \
+                            each_behavior[1].date() < end_date):
+                            behavior_cnt[each_behavior[0] - 1] += each_behavior[2]
 
         if (user_id in g_user_behavior_patten):
             for item_id, item_opt_records in g_user_behavior_patten[user_id].items():
@@ -60,9 +72,23 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feat
                             each_behavior[1].date() < end_date):
                             behavior_cnt[each_behavior[0] - 1] += each_behavior[2]
 
+        # 购买/浏览， 购买/收藏， 购买/购物车
         for behavior_index in range(3):
             if (behavior_cnt[behavior_index] != 0):
-                behavior_cnt[behavior_index + 4] = round(behavior_cnt[3] / (behavior_cnt[3] + behavior_cnt[behavior_index]), 4)
+                behavior_cnt[behavior_index + 4] = round(behavior_cnt[3] / behavior_cnt[behavior_index], 4)
+
+        # 购物车/浏览
+        if (behavior_cnt[0] > 0):
+            behavior_cnt[7] = behavior_cnt[2] / behavior_cnt[0]
+
+        # 购物车/收藏
+        if (behavior_cnt[1] > 0):
+            behavior_cnt[7] = behavior_cnt[2] / behavior_cnt[1]
+
+        # 用户在item上的行为数/用户总的行为数
+        for behavior_index in range(4):
+            if (behavior_cnt[behavior_index] != 0):
+                behavior_cnt[behavior_index+9] = user_behavior_cnt_on_item[index, behavior_index] / behavior_cnt[behavior_index]
 
         how_many_behavior_list[index] = behavior_cnt
         how_many_behavior_dict[user_id] = behavior_cnt
@@ -102,7 +128,10 @@ def feature_mean_days_between_buy_user(window_start_date, window_end_date, user_
             mean_days_between_list[index] = mean_days_between_buy_dict[user_id]
             continue
 
-        buy_date = set()
+        if (user_id not in g_user_buy_transection):
+            continue
+
+        buy_date = set()            
         for item_id, item_buy_records in g_user_buy_transection[user_id].items():
             for each_record in item_buy_records:
                 if (each_record[-1][1].date() >= window_start_date and 
@@ -254,12 +283,13 @@ def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_
         days_for_behavior_dict[BEHAVIOR_TYPE_CART] = set()
         days_for_behavior_dict[BEHAVIOR_TYPE_BUY] = set()
 
-        for item_id, item_buy_records in g_user_buy_transection[user_id].items():
-            for each_record in item_buy_records:
-                for each_behavior in each_record:
-                    if (each_behavior[1].date() >= window_start_date and
-                        each_behavior[1].date() < window_end_date):
-                        days_for_behavior_dict[each_behavior[0]].add(each_behavior[1].date())
+        if (user_id in g_user_buy_transection):
+            for item_id, item_buy_records in g_user_buy_transection[user_id].items():
+                for each_record in item_buy_records:
+                    for each_behavior in each_record:
+                        if (each_behavior[1].date() >= window_start_date and
+                            each_behavior[1].date() < window_end_date):
+                            days_for_behavior_dict[each_behavior[0]].add(each_behavior[1].date())
 
         if (user_id in g_user_behavior_patten):
             for item_id, item_opt_records in g_user_behavior_patten[user_id].items():
@@ -326,6 +356,9 @@ def feature_how_many_buy_in_days(window_start_date, window_end_date, user_item_p
 
         if (user_id in buy_in_days_dict):
             buy_in_days_list[index] = buy_in_days_dict[user_id]
+            continue
+
+        if (user_id not in g_user_buy_transection):
             continue
 
         #统计每个 item 出现的次数， 0 -- slide window day 次

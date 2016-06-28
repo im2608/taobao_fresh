@@ -60,13 +60,11 @@ redis_cli = redis.Redis(host='10.57.14.7', port=6379, db=0)
 # INFO     20
 # DEBUG    10
 # NOTSET   0
-logging.basicConfig(level=logging.INFO,\
-                    format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
-                    datefmt='%a, %d %b %Y %H:%M:%S',\
-                    filename='..\\log\\log.run.txt',\
-                    filemode='w')
-
-
+# logging.basicConfig(level=logging.INFO,\
+#                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
+#                     datefmt='%a, %d %b %Y %H:%M:%S',\
+#                     filename='..\\log\\log.test.txt',\
+#                     filemode='w')
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
@@ -467,7 +465,7 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
     skiped_user = 0
     
     for user_id in all_users:
-        # if (user_id != '49818651'):
+        # if (user_id != '50030386'):
         #     continue
 
         if (user_index < start_from):
@@ -539,93 +537,6 @@ def loadRecordsFromRedis(start_from, run_for_users_cnt):
 
     return
 
-def calculate_item_popularity_by_records(user_records, item_popularity_dict, item_category_opt_cnt_dict):
-    for user_id, item_opt_records in user_records.items():
-        for item_id, records in item_opt_records.items():
-
-            item_category = global_train_item_category[item_id]
-
-            if (item_category not in item_category_opt_cnt_dict):
-                item_category_opt_cnt_dict[item_category] = dict()
-
-            if (item_id not in item_popularity_dict):
-                item_popularity_dict[item_id] = dict()
-
-            for each_record in records:
-                for each_behavior in each_record:
-                    behavior_type = each_behavior[0]
-                    if (behavior_type not in item_category_opt_cnt_dict[item_category]):
-                        item_category_opt_cnt_dict[item_category][behavior_type] = 0
-                    item_category_opt_cnt_dict[item_category][behavior_type] += each_behavior[2]
-
-                    if (behavior_type not in item_popularity_dict[item_id]):
-                        item_popularity_dict[item_id][behavior_type] = 0
-                    item_popularity_dict[item_id][behavior_type] += each_behavior[2]
-    return 0
-
-# 每个 item 在各个 behavior type 上的热度
-# item 在各个 behavior type 上的次数/category 在各个 behavior type 上的次数
-def calculate_item_popularity():
-    #每个 item 在各个 behavior type 上的热度
-    item_popularity_dict = dict()
-
-    #在 category 上进行过各个 behavior type 操作的次数
-    item_category_opt_cnt_dict = dict()
-
-    calculate_item_popularity_by_records(g_user_buy_transection, item_popularity_dict, item_category_opt_cnt_dict)
-    calculate_item_popularity_by_records(g_user_behavior_patten, item_popularity_dict, item_category_opt_cnt_dict)
-
-    for item_id in item_popularity_dict:
-        item_category = global_train_item_category[item_id]
-        for behavior_type in [BEHAVIOR_TYPE_VIEW, BEHAVIOR_TYPE_FAV, BEHAVIOR_TYPE_CART, BEHAVIOR_TYPE_BUY]:
-            if (behavior_type in item_popularity_dict[item_id]):
-                item_popularity_dict[item_id][behavior_type] = \
-                    round(item_popularity_dict[item_id][behavior_type]/item_category_opt_cnt_dict[item_category][behavior_type], 6)
-            else:
-                item_popularity_dict[item_id][behavior_type] = 0
-
-    if (len(item_popularity_dict) <= 500 ):
-        logging.info("item popularity %s" % item_popularity_dict)
-    return item_popularity_dict
-
-
-def getBehaviorCnt(user_records, window_start_date, window_end_date, item_behavior_cnt_dict):
-    for user_id, item_opt_records in user_records.items():
-        for item_id, records in item_opt_records.items():
-            if (item_id not in item_behavior_cnt_dict):
-                item_behavior_cnt_dict[item_id] = [0, 0, 0, 0]
-
-            for each_record in records:
-                for behavior_consecutive in each_record:
-                    if (behavior_consecutive[1].date() >= window_start_date and
-                        behavior_consecutive[1].date() < window_end_date):
-                        item_behavior_cnt_dict[item_id][behavior_consecutive[0] - 1] += behavior_consecutive[2]
-
-#热度： [window_start_date, window_end_date) 窗口内： （点击数*0.01+购买数*0.94+购物车数*0.47+收藏数*0.33）
-def calculateItemPopularity(window_start_date, window_end_date):
-    logging.info("calculateItemPopularity.. ")
-    item_popularity_dict = dict()
-    item_behavior_cnt_dict = dict()
-
-    getBehaviorCnt(g_user_buy_transection, window_start_date, window_end_date, item_behavior_cnt_dict)
-    getBehaviorCnt(g_user_behavior_patten, window_start_date, window_end_date, item_behavior_cnt_dict)
-    index = 0
-    total_items = len(item_behavior_cnt_dict)
-    for item_id, behavior_cnt in item_behavior_cnt_dict.items():
-        popularity = behavior_cnt[0]*0.01 + behavior_cnt[1]*0.33 + behavior_cnt[2]*0.47 + behavior_cnt[3]*0.94
-        item_popularity_dict[item_id] = popularity
-
-        # logging.info("%s to %s, %s popularity %s ==> %.1f" % 
-        #             (window_start_date, window_end_date, item_id, behavior_cnt, popularity))
-
-        index += 1
-        if (index % 1000 == 0):
-            print("                %d / %d popularity calculated\r" % (index, total_items), end="")
-
-    logging.info("leaving calculateItemPopularity")
-
-    return item_popularity_dict    
-
 def loggingProbility(predicted_prob):
     m = np.shape(predicted_prob)[0]
     for i in range(m):
@@ -690,5 +601,35 @@ def addSubFeatureMatIntoFeatureMat(sub_feature_mat, sub_feature_cnt, feature_mat
     return sub_feature_cnt
 
 
-def calculateUserFavorite():
-    return 0
+
+# 统计用户第一次接触item到购买item之间的天数
+def daysBetween1stBehaviorToBuy():
+    print("%s calculating days between first behavior to buy..." % (getCurrentTime()))
+
+    days_1st_beahvior_buy_dict = dict()
+    
+    total_buy = 0
+
+    for user_id, item_id_buy in g_user_buy_transection.items():
+        for item_id, buy_records in item_id_buy.items():
+            for each_record in buy_records:
+                timedelta = each_record[-1][1] - each_record[0][1]
+                days = (each_record[-1][1] - each_record[0][1]).days
+                if (days not in days_1st_beahvior_buy_dict):
+                    days_1st_beahvior_buy_dict[days] = 0
+                days_1st_beahvior_buy_dict[days] += 1
+                if (total_buy % 1000 == 0):
+                    print("    %d  buy records checkd\r" % (total_buy), end="")
+                total_buy += 1
+
+    for days, how_man_buy in days_1st_beahvior_buy_dict.items():
+        logging.info("days, how_man_buy %d, %d" % (days, how_man_buy))
+
+    days_list = days_1st_beahvior_buy_dict.keys()
+
+    buy_vol = 0
+    for days in days_list:
+        buy_vol += days_1st_beahvior_buy_dict[days]
+        logging.info("first %d days buy %d account for %.2f, total %d " % (days, buy_vol, buy_vol/total_buy, total_buy))
+
+    exit(0)

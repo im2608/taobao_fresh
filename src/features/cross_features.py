@@ -101,7 +101,7 @@ def feature_buyer_ratio_item_category(user_cnt_buy_item, user_cnt_buy_category, 
 def feature_1st_last_between_item_category(days_first_last_item, days_first_last_category, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     if (days_first_last_item is None or days_first_last_category is None):
         return None, 0
-        
+
     features_names = ["feature_1st_between_item_category_view",
                       "feature_1st_between_item_category_fav",
                       "feature_1st_between_item_category_cart",

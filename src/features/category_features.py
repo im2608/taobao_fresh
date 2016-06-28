@@ -32,22 +32,32 @@ def get_everyday_behavior_cnt_of_category(window_start_date, window_end_date, it
 
     return behavior_cnt_every_day
 
-# 在 [begin_date, checking_date) 期间， 各个 behavior 在 item 上的总次数, 平均每天的点击数以及方差
-# 返回 12 个特征
+# 前 pre_days 天， category 上 各个behavior 的总次数, 平均每天的点击数以及方差
+
+# 返回 17 个特征
 def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     logging.info("feature_beahvior_cnt_on_category(%d, %s)" % (pre_days, window_end_date))
     features_names = ["feature_beahvior_cnt_on_category_%d_view" % pre_days, 
                       "feature_beahvior_cnt_on_category_%d_fav" % pre_days,
                       "feature_beahvior_cnt_on_category_%d_cart" % pre_days,
                       "feature_beahvior_cnt_on_category_%d_buy" % pre_days,
+
                       "feature_beahvior_cnt_on_category_%d_view_mean" % pre_days, 
                       "feature_beahvior_cnt_on_category_%d_fav_mean" % pre_days,
                       "feature_beahvior_cnt_on_category_%d_cart_mean" % pre_days,
                       "feature_beahvior_cnt_on_category_%d_buy_mean" % pre_days,
+
                       "feature_beahvior_cnt_on_category_%d_view_var" % pre_days, 
                       "feature_beahvior_cnt_on_category_%d_fav_var" % pre_days,
                       "feature_beahvior_cnt_on_category_%d_cart_var" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_buy_var" % pre_days]
+                      "feature_beahvior_cnt_on_category_%d_buy_var" % pre_days,
+
+                      "feature_beahvior_cnt_on_category_%d_buy_view" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_buy_fav" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_buy_cart" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_cart_view" % pre_days,
+                      "feature_beahvior_cnt_on_category_%d_cart_fav" % pre_days,
+                      ]
 
     useful_features = None
     if (not cal_feature_importance):
@@ -99,6 +109,22 @@ def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs,
             behavior_cnt_mean_var[i] = np.sum(behavior_cnt_every_day[i])
             behavior_cnt_mean_var[i + 4] = round(np.mean(behavior_cnt_every_day[i]), 2)
             behavior_cnt_mean_var[i + 8] = round(np.var(behavior_cnt_every_day[i]), 2)
+
+        # 购物车/浏览
+        if (behavior_cnt_mean_var[0] > 0):
+            behavior_cnt_mean_var[12] = behavior_cnt_mean_var[2] / behavior_cnt_mean_var[0]
+        # 购物车/收藏
+        if (behavior_cnt_mean_var[1] > 0):
+            behavior_cnt_mean_var[13] = behavior_cnt_mean_var[2] / behavior_cnt_mean_var[1]
+        # 购买/浏览
+        if (behavior_cnt_mean_var[0] > 0):
+            behavior_cnt_mean_var[14] = behavior_cnt_mean_var[3] / behavior_cnt_mean_var[0]
+        # 购买/收藏
+        if (behavior_cnt_mean_var[1] > 0):
+            behavior_cnt_mean_var[15] = behavior_cnt_mean_var[3] / behavior_cnt_mean_var[1]
+        # 购买/收藏
+        if (behavior_cnt_mean_var[2] > 0):
+            behavior_cnt_mean_var[16] = behavior_cnt_mean_var[3] / behavior_cnt_mean_var[2]
 
         category_behavior_cnt_dict[item_category] = behavior_cnt_mean_var
         category_behavior_cnt_list[index] = behavior_cnt_mean_var

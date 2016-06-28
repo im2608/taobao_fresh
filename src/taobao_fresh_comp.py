@@ -150,6 +150,7 @@ def loadTestingFeaturesFromRedis():
     return samples_test_list
 
 
+
 # 若 cal_feature_importance = True， 则累加特征的重要性， 忽略 final_feature_importance
 # 若为 False，则 final_feature_importance 为累加好的特征重要性， 根据特征的重要性在滑动窗口内重新训练model
 def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, cal_feature_importance, final_feature_importance):
@@ -190,30 +191,66 @@ from taking_sample import *
 import verify
 from feature_selection import *
 
+
+# CRITICAL 50
+# ERROR    40
+# WARNING  30
+# INFO     20
+# DEBUG    10
+# NOTSET   0
+
+
 #apriori.loadDataAndSaveToRedis(need_verify)
 #loadTrainCategoryItemAndSaveToRedis()
-
 print("--------------------------------------------------")
 print("--------------- Starting... ----------------------")
 print("--------------------------------------------------")
 loadTrainCategoryItemFromRedis()
 loadTestSet()
 
+
+start_from = int(sys.argv[1].split("=")[1])
+user_cnt = int(sys.argv[2].split("=")[1])
+slide_windows_days = int(sys.argv[3].split("=")[1])
+topK = int(sys.argv[4].split("=")[1])
+
+print("start_from %d, user_cnt %d" % (start_from, user_cnt))
+
+# start_from = 4000
+# user_cnt = 0
+# slide_windows_days = 4
+# topK = 1000
+min_proba = 0.6
+
+n_estimators = 300
+
+
+log_file = '..\\log\\log.%d.%d.txt' % (start_from, user_cnt)
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
+                    datefmt='%a, %d %b %Y %H:%M:%S',
+                    filename=log_file,
+                    filemode='w')
+
 print("=====================================================================")
 print("=========================  training...   ============================")
+print("======== user from %d, count %d, slide window size %d ========" % (start_from, user_cnt, slide_windows_days))
 print("=====================================================================")
 
-start_from = 0
-user_cnt = 500
-slide_windows_days = 10
+
 
 loadRecordsFromRedis(start_from, user_cnt)
 
+
+#daysBetween1stBehaviorToBuy()
+
+
 if (user_cnt == 0):
-    window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
+    window_start_date = datetime.datetime.strptime("2014-12-01", "%Y-%m-%d").date()
     final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
 else:
-    window_start_date = datetime.datetime.strptime("2014-12-05", "%Y-%m-%d").date()
+    window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
     final_end_date = datetime.datetime.strptime("2014-12-17", "%Y-%m-%d").date()
 
 slide_windows_models = []
@@ -233,7 +270,7 @@ print("=====================================================================")
 print("=================  training with feature importance(%d) =============" % useful_features)
 print("=====================================================================")
 
-slide_windows_models, _ = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, False, feature_importance)
+# slide_windows_models, _ = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, False, feature_importance)
 
 nag_per_pos = 10
 
@@ -244,16 +281,11 @@ window_start_date = window_end_date - datetime.timedelta(slide_windows_days)
 # 根据滑动窗口的结果，使用重要性 > 0 的特征从 12-08 -- 12-17 生成特征矩阵以及12-18 的购买记录，交给滑动窗口
 # 训练出的model，生成叶节点，传给 LR 再进行训练， 最后使用 LR 从 12-09 -- 12-18 生成特征矩阵进行预测
 print("=====================================================================")
-print("==============  generating weights %s - %s ==========" % (window_start_date, window_end_date))
+print("==============  generating weights %s - %s (%d)=======" % (window_start_date, window_end_date, slide_windows_days))
 print("=====================================================================")
 
 
-# item 的热度
-print("        %s calculating popularity..." % getCurrentTime())
-#item_popularity_dict = calculate_item_popularity()
-item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
-print("        %s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
-samples_weight, Ymat_weight = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos, item_popularity_dict)
+samples_weight, Ymat_weight = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos)
 
 # samples_weight, Ymat_weight = takingSamplesForForecasting(window_start_date, window_end_date)
 
@@ -264,8 +296,7 @@ params = {'window_start_date' : window_start_date,
          'window_end_date' : window_end_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_weight, 
-         'item_popularity_dict' : None, 
-         'cal_feature_importance' : False, 
+         'cal_feature_importance' : True, 
          'final_feature_importance' : feature_importance}
 
 Xmat_weight = GBDT.createTrainingSet(**params)
@@ -273,7 +304,7 @@ Xmat_weight = preprocessing.scale(Xmat_weight)
 m, n = np.shape(Xmat_weight)
 print("        %s matrix for generating weights (%d, %d)" % (getCurrentTime(), m, n))
 
-Xmat_weight, Ymat_weight = shuffle(Xmat_weight, Ymat_weight, random_state=13)
+# Xmat_weight, Ymat_weight = shuffle(Xmat_weight, Ymat_weight, random_state=13)
 
 X_train, X_train_lr, Y_train, Y_train_lr = train_test_split(Xmat_weight,
                                                             Ymat_weight,
@@ -300,7 +331,8 @@ print("        %s runing LR..." % (getCurrentTime()))
 logisticReg = LogisticRegression()
 logisticReg.fit(X_train_features, Ymat_weight)
 
-params = {'n_estimators': 500, 
+
+params = {'n_estimators': n_estimators, 
           'max_depth': 4,
           'min_samples_split': 1,
           'learning_rate': 0.01, 
@@ -315,25 +347,24 @@ gbdtRegressor = GradientBoostingClassifier(**params)
 gbdtRegressor.fit(X_train_features, Ymat_weight)
 
 print("        %s runing RF..." % (getCurrentTime()))
-rfcls = RandomForestClassifier(n_estimators=500)
+rfcls = RandomForestClassifier(n_estimators=n_estimators)
 rfcls.fit(X_train_features, Ymat_weight)
 
 # 采样 12-09 - 12-18 的数据生成特征矩阵
 forecast_date = window_end_date + datetime.timedelta(1)
 print("=====================================================================")
-print("==============forecasting %s  ==============================" % forecast_date)
+print("==============  forecasting %s  ============================" % forecast_date)
 print("=====================================================================")
 
 window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
 
-samples_forecast, _ = takingSamplesForForecasting(window_start_date, forecast_date)
+samples_forecast, _ = takingSamplesForForecasting(window_start_date, forecast_date, True)
 
 params = {'window_start_date' : window_start_date, 
          'window_end_date' : forecast_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_forecast, 
-         'item_popularity_dict' : None, 
-         'cal_feature_importance' : False, 
+         'cal_feature_importance' : True, 
          'final_feature_importance' : feature_importance}
 Xmat_forecast = GBDT.createTrainingSet(**params)
 Xmat_forecast = preprocessing.scale(Xmat_forecast)
@@ -358,43 +389,34 @@ findal_predicted_prob = logisticReg.predict_proba(X_forecast_features)
 findal_predicted_prob += gbdtRegressor.predict_proba(X_forecast_features)
 findal_predicted_prob += rfcls.predict_proba(X_forecast_features)
 
-topK = 1000
-min_proba = 0.6
-
 if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()):
 
     # 按照 probability 降序排序
     prob_desc = np.argsort(-findal_predicted_prob[:, 1])
 
-    if (len(samples_forecast) > 1000):
-        topK = 1000
-    else:
+    if (len(samples_forecast) < topK):
         topK = round(len(samples_forecast) / 2)
 
     print("%s probility of top1 = %.4f, top%d = %.4f" % 
           (getCurrentTime(), findal_predicted_prob[prob_desc[0], 1], topK, findal_predicted_prob[prob_desc[topK], 1] ))
 
-
     file_idx = 0
-    output_file_name = "%s\\..\\output\\forecast.GBDT.LR.%s.%d.csv" % (runningPath, datetime.date.today(), file_idx)
+    output_file_name = "%s\\..\\output\\subdata\\forecast.GBDT.LR.%d.%d.%d.%s.%d.csv" % (runningPath, slide_windows_days, start_from, user_cnt, datetime.date.today(), file_idx)
     while (os.path.exists(output_file_name)):
         file_idx += 1
-        output_file_name = "%s\\..\\output\\forecast.GBDT.LR.%s.%d.csv" % (runningPath, datetime.date.today(), file_idx)
+        output_file_name = "%s\\..\\output\\subdata\\forecast.GBDT.LR.%d.%d.%d.%s.%d.csv" % (runningPath, slide_windows_days, start_from, user_cnt, datetime.date.today(), file_idx)
 
     print("        %s outputting %s" % (getCurrentTime(), output_file_name))
     outputFile = open(output_file_name, encoding="utf-8", mode='w')
-    outputFile.write("user_id,item_id\n")
-    # for index in range(len(predicted_prob)):
-    #     if (predicted_prob[index][1] >= min_proba):
-    #         outputFile.write("%s,%s\n" % (samples_forecast[index][0], samples_forecast[index][1]))
+    # outputFile.write("user_id,item_id\n")    
     for index in range(topK):
         if (findal_predicted_prob[prob_desc[index], 1] < min_proba):
             print("        %s probability %.4f < min_proba %.4f, breaking..." %
                   (getCurrentTime(), findal_predicted_prob[prob_desc[index], 1], min_proba))
             break
 
-        outputFile.write("%s,%s\n" %
-            (samples_forecast[prob_desc[index]][0], samples_forecast[prob_desc[index]][1]))
+        outputFile.write("%s,%s,%.4f\n" %
+            (samples_forecast[prob_desc[index]][0], samples_forecast[prob_desc[index]][1], findal_predicted_prob[prob_desc[index], 1] ))
         logging.info("prediction probability (%s,%s) =  %.4f" % 
             (samples_forecast[prob_desc[index]][0], samples_forecast[prob_desc[index]][1], findal_predicted_prob[prob_desc[index], 1]))
 
