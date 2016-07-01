@@ -22,18 +22,18 @@ def waitSubprocesses(runningSubProcesses):
 
 
 total_users = 17654
-users_one_time = 2000
+users_one_time = 50
 slide_windows_days = 4
 topK = 1000
 user_for_subprocess = {0:users_one_time, 
                        2000:users_one_time, 
-                       4000:users_one_time, 
-                       6000:users_one_time, 
-                       8000:users_one_time, 
-                       10000:users_one_time, 
-                       12000:users_one_time, 
-                       14000:users_one_time, 
-                       16000:1654
+                       # 4000:users_one_time, 
+                       # 6000:users_one_time, 
+                       # 8000:users_one_time, 
+                       # 10000:users_one_time, 
+                       # 12000:users_one_time, 
+                       # 14000:users_one_time, 
+                       # 16000:1654
                        }
 
 runningPath = sys.path[0]

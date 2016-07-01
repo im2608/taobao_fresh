@@ -179,6 +179,15 @@ def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_d
 
     return slide_windows_models, feature_importances
 
+
+def filterSamplesByProbility(samples, probability, min_proba):
+    filtered_samples = []
+    for index, user_item in enumerate(samples):
+        if (probability[index] >= min_proba):
+            filtered_samples.append(index)
+
+    return filtered_samples
+    
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
@@ -249,9 +258,9 @@ loadRecordsFromRedis(start_from, user_cnt)
 if (user_cnt == 0):
     window_start_date = datetime.datetime.strptime("2014-12-01", "%Y-%m-%d").date()
     final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
-else:
+else:    
     window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
-    final_end_date = datetime.datetime.strptime("2014-12-17", "%Y-%m-%d").date()
+    final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
 
 slide_windows_models = []
 
@@ -267,10 +276,10 @@ for feature_name, idx in g_feature_info.items():
         useful_features += 1
 
 print("=====================================================================")
-print("=================  training with feature importance(%d) =============" % useful_features)
+print(" training with feature importance slide days (%d) =============" % useful_features)
 print("=====================================================================")
 
-# slide_windows_models, _ = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, False, feature_importance)
+slide_windows_models, _ = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, False, feature_importance)
 
 nag_per_pos = 10
 
@@ -296,7 +305,7 @@ params = {'window_start_date' : window_start_date,
          'window_end_date' : window_end_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_weight, 
-         'cal_feature_importance' : True, 
+         'cal_feature_importance' : False, 
          'final_feature_importance' : feature_importance}
 
 Xmat_weight = GBDT.createTrainingSet(**params)
@@ -306,9 +315,7 @@ print("        %s matrix for generating weights (%d, %d)" % (getCurrentTime(), m
 
 # Xmat_weight, Ymat_weight = shuffle(Xmat_weight, Ymat_weight, random_state=13)
 
-X_train, X_train_lr, Y_train, Y_train_lr = train_test_split(Xmat_weight,
-                                                            Ymat_weight,
-                                                            test_size=0.5)
+# X_train, X_train_lr, Y_train, Y_train_lr = train_test_split(Xmat_weight, Ymat_weight, test_size=0.5)
 
 slide_windows_onehot = []
 # 滑动窗口训练出的model分别对12-08 -- 12-17的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
@@ -327,6 +334,8 @@ m, n = X_train_features.shape
 print("        %s X_train_features by split window models %d, %d " % (getCurrentTime(), m, n))
 
 # EnsembleModel
+
+# 逻辑回归算法
 print("        %s runing LR..." % (getCurrentTime()))
 logisticReg = LogisticRegression()
 logisticReg.fit(X_train_features, Ymat_weight)
@@ -340,12 +349,14 @@ params = {'n_estimators': n_estimators,
           'loss': 'deviance'
           }
 
-# # 使用GBDT 算法
+# GBDT 算法
 # gbdtRegressor = GradientBoostingRegressor(**params)
 print("        %s runing GBDT..." % (getCurrentTime()))
 gbdtRegressor = GradientBoostingClassifier(**params)
 gbdtRegressor.fit(X_train_features, Ymat_weight)
 
+
+# 随机森林算法
 print("        %s runing RF..." % (getCurrentTime()))
 rfcls = RandomForestClassifier(n_estimators=n_estimators)
 rfcls.fit(X_train_features, Ymat_weight)
@@ -364,7 +375,7 @@ params = {'window_start_date' : window_start_date,
          'window_end_date' : forecast_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_forecast, 
-         'cal_feature_importance' : True, 
+         'cal_feature_importance' : False, 
          'final_feature_importance' : feature_importance}
 Xmat_forecast = GBDT.createTrainingSet(**params)
 Xmat_forecast = preprocessing.scale(Xmat_forecast)
