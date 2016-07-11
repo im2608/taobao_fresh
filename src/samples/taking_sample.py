@@ -18,19 +18,19 @@ def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos):
     positive_users = set()
 
     # item 的热度
-    print("        %s calculating popularity..." % getCurrentTime())
-    #item_popularity_dict = calculate_item_popularity()
-    item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
-    print("        %s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
+    # print("        %s calculating popularity..." % getCurrentTime())
+    # #item_popularity_dict = calculate_item_popularity()
+    # item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
+    # print("        %s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
 
-    positive_samples = takingPositiveSamplesOnDate(window_end_date)
+    positive_samples = takingPositiveSamplesOnDate(window_start_date, window_end_date)
     for user_item in positive_samples:
         samples.append(user_item)
         positive_users.add(user_item[0])
         Ymat.append(1)
         total_positive += 1
 
-    nagetive_samples = takeNagetiveSamplesByUserActivity(window_start_date, window_end_date, total_positive * nag_per_pos)
+    nagetive_samples = takeNagetiveSamplesByUserActivity(window_start_date, window_end_date, positive_samples, total_positive* nag_per_pos)
     for user_item in nagetive_samples:
         samples.append(user_item)
         Ymat.append(0)
@@ -47,7 +47,7 @@ def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos):
 
     return list(samples), Ymat
 
-def takingPositiveSamples(window_start_date, window_end_date):
+def takingPositiveSamplesInPeriord(window_start_date, window_end_date):
     print("        %s taking positive samples(%s, %s)" % (getCurrentTime(), window_start_date, window_end_date))
     logging.info("taking positive samples(%s, %s)" % (window_start_date, window_end_date))
     positive_samples = set()
@@ -66,7 +66,7 @@ def takingPositiveSamples(window_start_date, window_end_date):
     print("        %s positive smaple %d" % (getCurrentTime(), len(positive_samples)))
     return positive_samples_in_validate
 
-def takingPositiveSamplesOnDate(buy_date):
+def takingPositiveSamplesOnDate(window_start_date, buy_date):
     print("        %s taking positive samples on (%s)" % (getCurrentTime(), buy_date))
     positive_samples = set()
     buy_cnt = len(g_user_buy_transection)
@@ -74,7 +74,9 @@ def takingPositiveSamplesOnDate(buy_date):
     for user_id, item_buy_records in g_user_buy_transection.items():
         for item_id, buy_records in item_buy_records.items():
             for each_record in buy_records:
-                if (each_record[-1][1].date() == buy_date): #and item_id in global_test_item_category):
+                # 当天浏览， 当天购买的记录不作为正样本
+                if (each_record[-1][1].date() == buy_date and each_record[0][1].date() != buy_date):
+                     #and item_id in global_test_item_category):
                     positive_samples.add((user_id, item_id))
         index += 1
 
@@ -300,15 +302,50 @@ def calculateItemPopularity(window_start_date, window_end_date):
 
     return item_popularity_dict#, item_popularity_in_category_dict
 
+################################################################################################################
+################################################################################################################
+################################################################################################################
+
+def getUserItemPairsByUserBehavior(window_start_date, window_end_date, positive_samples):
+    positive_samples = set(positive_samples)
+
+    nagetive_samples = list()
+    day_before_end_date = window_end_date - datetime.timedelta(1)
+    for user_id, user_pattern_records in g_user_behavior_patten.items():        
+        for item_id, item_pattern_record in user_pattern_records.items():
+            added_in_sample = False
+            if ((user_id, item_id) in positive_samples or added_in_sample):
+                break
+            for each_record in item_pattern_record:
+                if (added_in_sample):
+                    break
+                for behavior in each_record:
+                    if (behavior[1].date() == day_before_end_date
+                        or
+                        (behavior[1].date() >= window_start_date and behavior[1].date() < day_before_end_date and 
+                        behavior[0] != BEHAVIOR_TYPE_VIEW)):
+                        nagetive_samples.append((user_id, item_id))
+                        added_in_sample = True
+                        break
+
+    print("takeNagetiveSamplesByUserBehavior take %d nagetive samples" % len(nagetive_samples))
+    return nagetive_samples
+
+################################################################################################################
+################################################################################################################
+################################################################################################################
 # 根据用户的活跃度进行负采样
 # 用户的活跃度为用户在item上的活跃度之和
 # 用户活跃度/Sigma(所有用户活跃度的和) 为每个用户的负样本数 N
 # 按照用户在item上的活跃度降序排序， 取前N个作为用户的负样本
-def takeNagetiveSamplesByUserActivity(window_start_date, window_end_date, total_nagetive_cnt):
+def takeNagetiveSamplesByUserActivity(window_start_date, window_end_date, positive_samples, total_nagetive_cnt):
     nagetive_samples = []
-    user_activity_score_dict, total_activity = calculateUserActivity(window_start_date, window_end_date)
+
+    user_item_pairs = getUserItemPairsByUserBehavior(window_start_date, window_end_date, positive_samples)
+
+    user_activity_score_dict, total_activity = calculateUserActivity(window_start_date, window_end_date, user_item_pairs)
     for user_id, user_act_dict in user_activity_score_dict.items():
-        nagetive_cnt_of_user = round(user_act_dict["activity"] / total_activity * total_nagetive_cnt)
+        nagetive_cnt_of_user = round(user_act_dict["activity"] / total_activity * total_nagetive_cnt + 1)
         logging.info("user %s's nagetive samples: %d " % (user_id, nagetive_cnt_of_user))
         if (nagetive_cnt_of_user > len(user_act_dict["activity_on_item"])):
             nagetive_cnt_of_user = len(user_act_dict["activity_on_item"])
@@ -322,33 +359,33 @@ def takeNagetiveSamplesByUserActivity(window_start_date, window_end_date, total_
 
     return nagetive_samples
 
-def calculateUserActivity(window_start_date, window_end_date):
+def calculateUserActivity(window_start_date, window_end_date, user_item_pairs):
     user_activity_score_dict = dict()
     total_activity = 0.0
 
-    behavior_weight = {BEHAVIOR_TYPE_VIEW : 0.01,
-                       BEHAVIOR_TYPE_FAV  : 0.33, 
-                       BEHAVIOR_TYPE_CART : 0.47,
-                       BEHAVIOR_TYPE_BUY  : 0.94}
 
-    for user_id, user_pattern_records in g_user_behavior_patten.items():
+    for user_item in user_item_pairs:
+        user_id = user_item[0]
+        item_id = user_item[1]
+
         if (user_id not in user_activity_score_dict):
             user_activity_score_dict[user_id] = dict()
             user_activity_score_dict[user_id]["activity_on_item"] = []
-            user_activity_score_dict[user_id]["activity"] = 0.0
+            user_activity_score_dict[user_id]["activity"] = 0            
 
-        user_activiey_on_item = 0.0
-        for item_id, item_pattern_record in user_pattern_records.items():
-            for each_record in item_pattern_record:
-                for behavior in each_record:
-                    if (behavior[1].date() >= window_start_date and 
-                        behavior[1].date() < window_end_date):
-                        # 用户在item上的行为次乘以行为的权值得到用户在item上的分数， 分数越高，用户对item越感兴趣
-                        user_activiey_on_item += behavior[2] * behavior_weight[behavior[0]]
+        user_activiey_on_item = 0
+        for each_record in g_user_behavior_patten[user_id][item_id]:
+            for behavior in each_record:
+                if (behavior[1].date() >= window_start_date and 
+                    behavior[1].date() < window_end_date):
+                    days = (window_end_date - behavior[1].date()).days
+                    buy_prob = g_prob_bwteen_1st_days_and_buy[days]
+                    # 用户在item上的行为次数 * 行为的权值 * 行为日至购买日之前的天数导致购买的可能性 = 用户在item上的分数， 分数越高，用户对item越感兴趣
+                    user_activiey_on_item += behavior[2] * g_behavior_weight[behavior[0]] * buy_prob
 
-            user_activity_score_dict[user_id]["activity_on_item"].append((item_id, user_activiey_on_item))
-            user_activity_score_dict[user_id]["activity"] += user_activiey_on_item
-            total_activity += user_activiey_on_item
+        user_activity_score_dict[user_id]["activity_on_item"].append((item_id, user_activiey_on_item))
+        user_activity_score_dict[user_id]["activity"] += user_activiey_on_item
+        total_activity += user_activiey_on_item
 
     # 按照用户对item的分数从高到低排序
     for user_id, item_score in user_activity_score_dict.items():

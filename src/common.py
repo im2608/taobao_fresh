@@ -435,6 +435,16 @@ g_buy_record_cnt_verify = 0.0
 g_pattern_cnt = 0.0
 
 g_users_for_alog = []
+
+# 用户第一次接触商品到购买该商品之间的天数与用户购买该用户的可能性。天数越长，可能性越小
+g_prob_bwteen_1st_days_and_buy = {1:0.0571, 2:0.032, 3:0.0221, 4:0.0164, 5:0.0138, 6:0.0098, 7:0.0089, 8:0.0077, 9:0.0062, 10:0.0055}
+
+
+g_behavior_weight = {BEHAVIOR_TYPE_VIEW : 0.01,
+                     BEHAVIOR_TYPE_FAV  : 0.33, 
+                     BEHAVIOR_TYPE_CART : 0.47,
+                     BEHAVIOR_TYPE_BUY  : 0.94}
+
 # 每条购物记录在 redis 中都表现为字符串 
 #"[ [(1, 2014-01-01 23, 35), (2, 2014-01-02 22, 1)], [(1, 2014-01-02 23, 35), (2, 2014-01-03 14, 1)] ]"
 # run_for_users_cnt 跑多少个用户， 0 表示全部
@@ -633,3 +643,16 @@ def daysBetween1stBehaviorToBuy():
         logging.info("first %d days buy %d account for %.2f, total %d " % (days, buy_vol, buy_vol/total_buy, total_buy))
 
     exit(0)
+
+
+
+def filterSamplesByProbility(samples, forecast_features, probability, min_proba):
+    filtered_samples = []
+    filtered_features = []
+    filtered_Ymat = []
+    for index, user_item in enumerate(samples):
+        if (probability[index, 1] >= min_proba):
+            filtered_samples.append(user_item)
+            filtered_features.append(index)
+
+    return filtered_samples, forecast_features[filtered_features, :]

@@ -160,7 +160,7 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
              'window_end_date' : forecast_date,
              'nag_per_pos' : nag_per_pos, 
              'samples' : verify_samples, 
-             'cal_feature_importance' : True, 
+             'cal_feature_importance' : False, 
              'final_feature_importance' : final_feature_importance}
 
     Xmat_verify = GBDT.createTrainingSet(**params)
@@ -177,12 +177,32 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
 
     print("Verify featurs shape (%d, %d)" % (m, n))
 
-    findal_predicted_prob = logisticReg.predict_proba(X_verify_features)
-    findal_predicted_prob += gbdtRegressor.predict_proba(X_verify_features)
-    findal_predicted_prob += rfcls.predict_proba(X_verify_features)
+    findal_predicted_prob = rfcls.predict_proba(X_verify_features)
+    filtered_sampls, X_filtered_features = filterSamplesByProbility(verify_samples, X_verify_features, findal_predicted_prob, min_proba)
+    m, n = np.shape(X_filtered_features)
+    print("%s After filtering by Random Forecast, shape(X_filtered_features) = (%d, %d), samples = %d" % 
+         (getCurrentTime(), m, n, len(filtered_sampls)))
+    if (len(filtered_sampls) == 0):
+        print("        %s No samples after filtering by Logistic Regression")
+        filtered_sampls = verify_samples
+        X_filtered_features = X_verify_features
+
+    findal_predicted_prob = gbdtRegressor.predict_proba(X_filtered_features)
+    filtered_sampls_gbdt, X_filtered_features_gbdt = filterSamplesByProbility(filtered_sampls, X_filtered_features, findal_predicted_prob, min_proba)
+    m, n = np.shape(X_filtered_features_gbdt)
+    print("%s After filtering by GBDT, shape(X_filtered_features) = (%d, %d), samples = %d" % 
+         (getCurrentTime(), m, n, len(filtered_sampls)))
+    if (len(filtered_sampls_gbdt) == 0):
+        print("        %s No samples after filtering by GBDT")
+        filtered_sampls_gbdt = filtered_sampls
+        X_filtered_features_gbdt = X_filtered_features
+
+    findal_predicted_prob = logisticReg.predict_proba(X_filtered_features_gbdt)
 
     # 按照 probability 降序排序
     prob_desc = np.argsort(-findal_predicted_prob[:, 1])
+
+    verify_samples = filtered_sampls_gbdt
 
     if (len(verify_samples) < topK):
         topK = round(len(verify_samples) / 2)
@@ -200,7 +220,7 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
         user_item = verify_samples[prob_desc[index]]
         predicted_user_item.append(user_item)
 
-    actual_user_item = takingPositiveSamplesOnDate(forecast_date)
+    actual_user_item = takingPositiveSamplesOnDate(window_start_date, forecast_date)
 
     calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
     return 

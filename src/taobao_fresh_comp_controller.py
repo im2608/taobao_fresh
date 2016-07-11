@@ -22,25 +22,25 @@ def waitSubprocesses(runningSubProcesses):
 
 
 total_users = 17654
-users_one_time = 50
+users_one_time = 2000
 slide_windows_days = 4
 topK = 1000
 user_for_subprocess = {0:users_one_time, 
                        2000:users_one_time, 
-                       # 4000:users_one_time, 
-                       # 6000:users_one_time, 
-                       # 8000:users_one_time, 
-                       # 10000:users_one_time, 
-                       # 12000:users_one_time, 
-                       # 14000:users_one_time, 
-                       # 16000:1654
+                       4000:users_one_time, 
+                       6000:users_one_time, 
+                       8000:users_one_time, 
+                       10000:users_one_time, 
+                       12000:users_one_time, 
+                       14000:users_one_time, 
+                       16000:1654
                        }
 
 runningPath = sys.path[0]
 
 runningSubProcesses = {}
 for start_from, user_cnt in user_for_subprocess.items():
-    cmdLine = "python taobao_fresh_comp.py start_from=%d user_cnt=%d slide=%d topk=%d" % (start_from, user_cnt, slide_windows_days, topK)
+    cmdLine = "python taobao_fresh_comp.py start_from=%d user_cnt=%d slide=%d topk=%d test=0" % (start_from, user_cnt, slide_windows_days, topK)
     sub = subprocess.Popen(cmdLine, shell=True)
     runningSubProcesses[(start_from, user_cnt)] = sub
     print("running %s" % cmdLine)

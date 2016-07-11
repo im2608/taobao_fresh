@@ -7,6 +7,8 @@ g_feature_info = dict()
 # 矩阵中每个feature 的重要性
 g_features_importance = []
 
+g_min_inportance = 0.01
+
 def accumulateFeatureImportance(feature_importances_):
     global g_features_importance
 
@@ -32,7 +34,7 @@ def featuresForForecasting(features_names, final_feature_importances):
     # logging.info("features_names %s" % features_names)
 
     for i, name in enumerate(features_names):
-        if (final_feature_importances[g_feature_info[name]] > 0):
+        if (final_feature_importances[g_feature_info[name]] >= g_min_inportance):
             useful_features.append(i)
             logging.info("feature (%s, %.4f) is usefull" % (name, final_feature_importances[g_feature_info[name]]))
 

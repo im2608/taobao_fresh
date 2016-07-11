@@ -110,25 +110,34 @@ def userBehaviorCntOnItemBeforeCheckingDate(user_records, user_id, item_id, chec
 # 用户在item上 pre_days 天购买/收藏， 
 # 用户在item上 pre_days 天购物车/收藏， 
 # 用户在item上pre_days 天购物车/浏览, 
-# 返回 13 个特征
+# 用户在 item 上各个行为的加权值在用户所有操作过的item 上的排序
+# 用户在 item 上各个行为的加权值在用户对同 category 上操作过的item 上的排序
+# 用户在 category 上行为的加权值在用户对所有操作过的category 上的排序
+
+# 返回 16 个特征
 def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     logging.info("feature_user_item_behavior_ratio %d, %s" % (pre_days, checking_date))
 
     features_names = [
-                      "feature_user_item_behavior_pre_%d_view" % pre_days,
-                      "feature_user_item_behavior_pre_%d_fav" % pre_days,
-                      "feature_user_item_behavior_pre_%d_cart" % pre_days,
-                      "feature_user_item_behavior_pre_%d_buy" % pre_days,
-                      
+                      "feature_user_behavior_pre_%d_view" % pre_days,
+                      "feature_user_behavior_pre_%d_fav" % pre_days,
+                      "feature_user_behavior_pre_%d_cart" % pre_days,
+                      "feature_user_behavior_pre_%d_buy" % pre_days,
+
                       "feature_user_item_behavior_ratio_pre_%d_view" % pre_days,
                       "feature_user_item_behavior_ratio_pre_%d_fav" % pre_days,
                       "feature_user_item_behavior_ratio_pre_%d_cart" % pre_days,
                       "feature_user_item_behavior_ratio_pre_%d_buy" % pre_days,
+
                       "feature_user_item_behavior_ratio_pre_%d_buy_view" % pre_days,
                       "feature_user_item_behavior_ratio_pre_%d_buy_fav" % pre_days,
                       "feature_user_item_behavior_ratio_pre_%d_buy_cart" % pre_days,
                       "feature_user_item_behavior_ratio_pre_%d_cart_view" % pre_days,
                       "feature_user_item_behavior_ratio_pre_%d_cart_fav" % pre_days, 
+
+                      # "feature_how_many_behavior_user_item_rank_%d" % pre_days,
+                      # "feature_how_many_behavior_user_item_category_rand_%d" % pre_days,
+                      # "feature_how_many_behavior_user_category_rank_%d" % pre_days,
                       ]
 
     useful_features = None

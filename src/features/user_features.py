@@ -8,9 +8,9 @@ from feature_selection import *
 ################################  数据集中，用户的特征  ##############################################
 ####################################################################################################
 
-# 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为以及 购买/浏览， 购买/收藏， 购买/购物车, 购物车/收藏， 购物车/浏览的比率,
-# 返回 13 个特征
-def feature_how_many_behavior_user(pre_days, end_date, user_behavior_cnt_on_item, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+# 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为, 购买/浏览， 购买/收藏， 购买/购物车, 购物车/收藏， 购物车/浏览的比率,
+# 返回 9 个特征
+def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     begin_date = end_date - datetime.timedelta(pre_days)
     logging.info("entered feature_how_many_behavior_user(%s, %s)" % (begin_date, end_date))
 
@@ -25,11 +25,6 @@ def feature_how_many_behavior_user(pre_days, end_date, user_behavior_cnt_on_item
 
                       "feature_how_many_behavior_user_cart_view_ratio_%d" % pre_days,
                       "feature_how_many_behavior_user_cart_fav_ratio_%d" % pre_days,
-
-                      "feature_how_many_behavior_user_item_view_ratio_%d" % pre_days,
-                      "feature_how_many_behavior_user_item_fav_ratio_%d" % pre_days,
-                      "feature_how_many_behavior_user_item_cart_ratio_%d" % pre_days,
-                      "feature_how_many_behavior_user_item_buy_ratio_%d" % pre_days
                       ]
 
     useful_features = None
@@ -84,11 +79,6 @@ def feature_how_many_behavior_user(pre_days, end_date, user_behavior_cnt_on_item
         # 购物车/收藏
         if (behavior_cnt[1] > 0):
             behavior_cnt[7] = behavior_cnt[2] / behavior_cnt[1]
-
-        # 用户在item上的行为数/用户总的行为数
-        for behavior_index in range(4):
-            if (behavior_cnt[behavior_index] != 0):
-                behavior_cnt[behavior_index+9] = user_behavior_cnt_on_item[index, behavior_index] / behavior_cnt[behavior_index]
 
         how_many_behavior_list[index] = behavior_cnt
         how_many_behavior_dict[user_id] = behavior_cnt

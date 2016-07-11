@@ -263,91 +263,142 @@ def feature_days_from_1st_last_behavior_item(window_start_date, window_end_date,
 ################################################################################################
 ################################################################################################
 
-# [begin date, end date) 期间，总共有多少用户购买了该 item
-def feature_how_many_users_bought_item(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+def get_user_cnt_behavior_on_item(window_start_date, window_end_date, item_records, users_behavior_on_item, behavior_weight_on_item):
+    for item_id, user_buy_record in item_records.items():
+        item_category = global_train_item_category[item_id]
+
+        if (item_id not in users_behavior_on_item):
+            users_behavior_on_item[item_id] = dict()
+            users_behavior_on_item[item_id][BEHAVIOR_TYPE_VIEW] = set()
+            users_behavior_on_item[item_id][BEHAVIOR_TYPE_FAV] = set()
+            users_behavior_on_item[item_id][BEHAVIOR_TYPE_CART] = set()
+            users_behavior_on_item[item_id][BEHAVIOR_TYPE_BUY] = set()
+
+        if (item_category not in behavior_weight_on_item):
+            behavior_weight_on_item[item_category] = dict()
+
+        if (item_id not in behavior_weight_on_item[item_category]):
+            behavior_weight_on_item[item_category][item_id] = 0
+
+        for user_id, item_sale_records in user_buy_record.items():
+            for each_record in item_sale_records:
+                for behavior in each_record:
+                    if (behavior[1].date() >= window_start_date and behavior[1].date() < window_end_date):
+                        behavior_type = behavior[0]
+                        users_behavior_on_item[item_id][behavior_type].add(user_id)
+                        behavior_weight_on_item[item_category][item_id] += g_behavior_weight[behavior_type] * behavior[2]
+    return
+
+
+# [begin date, end date) 期间，总共有多少用户在该 item 上进行了各种操作，按照操作数量进行加权，得到 item 上的加权在 category 中的排序
+def feature_how_many_users_behavior_item(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     logging.info("feature_how_many_users_bought (%s, %s)" % (window_start_date, window_end_date))
 
-    feature_name = "feature_how_many_users_bought"
+    features_names = ["feature_how_many_users_view",
+                      "feature_how_many_users_fav",
+                      "feature_how_many_users_cart",
+                      "feature_how_many_users_bought",
+                      "feature_item_behavior_weight"]
 
-    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
+    useful_features = None
+    if (not cal_feature_importance):
+        useful_features = featuresForForecasting(features_names, final_feature_importance)
+        if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_how_many_users_behavior_item] has no useful features")
+            return None, 0
+        else:
+            logging.info("During forecasting, [feature_how_many_users_behavior_item] has %d useful features" % len(useful_features))
 
-    how_many_users_bought_dict = dict()
-    how_many_users_bought_list = np.zeros((len(user_item_pairs), 1))
+    users_behavior_on_item = dict()
+    behavior_weight_on_item = dict()
+
+    get_user_cnt_behavior_on_item(window_start_date, window_end_date, g_user_buy_transection_item, users_behavior_on_item, behavior_weight_on_item)
+    get_user_cnt_behavior_on_item(window_start_date, window_end_date, g_user_behavior_patten_item, users_behavior_on_item, behavior_weight_on_item)
+    
+    for item_category in behavior_weight_on_item:
+        sorted_behavior_weight = sorted(behavior_weight_on_item[item_category].items(), key=lambda item:item[1], reverse=True)
+
+        # logging.info("sorted_behavior_weight is %s" % sorted_behavior_weight)
+        for i, behavior_weight in enumerate(sorted_behavior_weight):
+            behavior_weight_on_item[item_category][behavior_weight[0]] = i + 1
+
+    beahvior_types = [BEHAVIOR_TYPE_VIEW, BEHAVIOR_TYPE_FAV, BEHAVIOR_TYPE_CART, BEHAVIOR_TYPE_BUY]
+
+    how_many_users_behavior_item = np.zeros((len(user_item_pairs), len(features_names)))
 
     for index in range(len(user_item_pairs)):
-        user_id = user_item_pairs[index][0]
         item_id = user_item_pairs[index][1]
+        item_category = global_train_item_category[item_id]
 
-        if (item_id in how_many_users_bought_dict):
-            how_many_users_bought_list[index] = how_many_users_bought_dict[item_id]
-            continue
+        for i, behavior in enumerate(beahvior_types):
+            how_many_users_behavior_item[index, i] = len(users_behavior_on_item[item_id][behavior])
 
-        users_bought_item = set()
-        if (item_id not in g_user_buy_transection_item):
-            continue
+        how_many_users_behavior_item[index, 4] = behavior_weight_on_item[item_category][item_id]
 
-        for user_id, item_buy_records in g_user_buy_transection_item[item_id].items():
-            if (user_id in users_bought_item):
-                continue
+        logging.info("users count behavior on item %s %s" % (item_id, how_many_users_behavior_item[index]))
 
-            for each_record in item_buy_records:
-                if (each_record[-1][1].date() >= window_start_date and 
-                    each_record[-1][1].date() < window_end_date):
-                    users_bought_item.add(user_id)
-                    break
-
-        user_cnt = len(users_bought_item)
-        how_many_users_bought_dict[item_id] = user_cnt
-        how_many_users_bought_list[index] = user_cnt
-
-        # logging.info("%d users bought item %s" % (user_cnt, item_id))
-
-    if (cal_feature_importance):
-        g_feature_info[feature_name] = cur_total_feature_cnt
-
-    logging.info("leaving feature_how_many_users_bought")
-    return how_many_users_bought_list, 1
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, how_many_users_behavior_item, features_names, useful_features)
 
 ################################################################################################
 ################################################################################################
 ################################################################################################
-# [begin date, end date) 期间， item 的销量
+
+def get_item_sale_vol_in_category(window_start_date, window_end_date):
+    items_sales_vol_in_category = dict()
+    for item_id, user_buy_records in g_user_buy_transection_item.items():
+        item_category = global_train_item_category[item_id]
+        if (item_category not in items_sales_vol_in_category):
+            items_sales_vol_in_category[item_category] = dict()
+
+        sales_vol = 0
+        for user_id, item_sale_records in user_buy_records.items():
+            for each_record in item_sale_records:
+                if (each_record[-1][1].date() >= window_start_date and each_record[-1][1].date() < window_end_date):
+                    sales_vol += 1
+
+        items_sales_vol_in_category[item_category][item_id] = sales_vol
+        logging.info("get_item_sale_vol_in_category(%s, %s), category %s, item %s, sale vol %d" %
+                     (window_start_date, window_end_date, item_category, item_id, sales_vol))
+
+    for item_category in items_sales_vol_in_category:
+        # 在 category 内部按照 item 的销量排序
+        sorted_item_sal_vol = sorted(items_sales_vol_in_category[item_category].items(), key=lambda item:item[1], reverse=True)
+
+        # item_sal_vol = （item id, item sal vol)
+        for i, item_sal_vol in enumerate(sorted_item_sal_vol):
+            items_sales_vol_in_category[item_category][item_sal_vol[0]] = (item_sal_vol[1], i + 1)
+
+    return items_sales_vol_in_category
+
+# [begin date, end date) 期间 item 的销量, 以及 item 的销量在 category 中其他 item 销量的排序
 def feature_item_sals_volume(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
     logging.info("feature_item_sals_volume (%s, %s)" % (window_start_date, window_end_date))
 
-    feature_name = "feature_item_sals_volume"
-    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
+    features_names = ["feature_item_sals_volume", "feature_item_sals_volume_rank"]
 
-    sals_volume_dict = dict()
-    sals_volume_list = np.zeros((len(user_item_pairs), 1))
+    useful_features = None
+    if (not cal_feature_importance):
+        useful_features = featuresForForecasting(features_names, final_feature_importance)
+        if (len(useful_features) == 0):
+            logging.info("During forecasting, [feature_days_from_1st_last_behavior_item] has no useful features")
+            return None, 0
+        else:
+            logging.info("During forecasting, [feature_days_from_1st_last_behavior_item] has %d useful features" % len(useful_features))
+
+    # category 中各个 item 的销量，用于排序
+    items_sales_vol_in_category = get_item_sale_vol_in_category(window_start_date, window_end_date)
+
+    sals_volume_list = np.zeros((len(user_item_pairs), len(features_names)))
 
     for index in range(len(user_item_pairs)):
         item_id = user_item_pairs[index][1]
+        item_category = global_train_item_category[item_id]
 
-        if (item_id in sals_volume_dict):
-            sals_volume_list[index] = sals_volume_dict[item_id]
-            continue
+        if (item_category in items_sales_vol_in_category and 
+            item_id in items_sales_vol_in_category[item_category]):
+            sals_volume_list[index, 0] = items_sales_vol_in_category[item_category][item_id][0]
+            sals_volume_list[index, 1] = items_sales_vol_in_category[item_category][item_id][1]
 
-        if (item_id not in g_user_buy_transection_item):
-            continue
+        logging.info("%s item sales volume %s " % (item_id, sals_volume_list[index]))
 
-        sales_vol = 0
-        for user_id, item_buy_records in g_user_buy_transection_item[item_id].items():
-            for each_record in item_buy_records:
-                if (each_record[-1][1].date() > window_start_date and each_record[-1][1].date() < window_end_date):
-                    sales_vol += 1
-
-        sals_volume_dict[item_id] = sales_vol
-        sals_volume_list[index] = sales_vol
-        # logging.info("%s item sales volume %d " % (item_id, sals_volume_list[index]))
-
-    if (cal_feature_importance):
-        g_feature_info[feature_name] = cur_total_feature_cnt
-
-    logging.info("leaving feature_item_sals_volume")
-
-    return sals_volume_list, 1
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, sals_volume_list, features_names, useful_features)

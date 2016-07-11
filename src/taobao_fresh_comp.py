@@ -11,6 +11,8 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import (GradientBoostingRegressor, RandomForestClassifier, GradientBoostingClassifier)
+from feature_selection import *
+
 
 def splitHistoryData(fileName, splited_files):
     print(" reading data file ", fileName)
@@ -161,7 +163,7 @@ def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_d
 
     #滑动窗口 11-18 -- 12-17 得到特征的重要性， 并保留每个滑动窗口训练出的的model
     while (window_end_date < final_end_date):    
-        slide_window_clf = GBDT.GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, final_feature_importance)
+        slide_window_clf = GBDT.GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, final_feature_importance, n_estimators)
         if (slide_window_clf == None):
             window_end_date += datetime.timedelta(1)
             window_start_date += datetime.timedelta(1)
@@ -180,14 +182,6 @@ def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_d
     return slide_windows_models, feature_importances
 
 
-def filterSamplesByProbility(samples, probability, min_proba):
-    filtered_samples = []
-    for index, user_item in enumerate(samples):
-        if (probability[index] >= min_proba):
-            filtered_samples.append(index)
-
-    return filtered_samples
-    
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
@@ -211,9 +205,14 @@ from feature_selection import *
 
 #apriori.loadDataAndSaveToRedis(need_verify)
 #loadTrainCategoryItemAndSaveToRedis()
+
+
+
 print("--------------------------------------------------")
 print("--------------- Starting... ----------------------")
 print("--------------------------------------------------")
+
+
 loadTrainCategoryItemFromRedis()
 loadTestSet()
 
@@ -222,16 +221,17 @@ start_from = int(sys.argv[1].split("=")[1])
 user_cnt = int(sys.argv[2].split("=")[1])
 slide_windows_days = int(sys.argv[3].split("=")[1])
 topK = int(sys.argv[4].split("=")[1])
+run_for_test = int(sys.argv[5].split("=")[1])
 
-print("start_from %d, user_cnt %d" % (start_from, user_cnt))
+# print("start_from %d, user_cnt %d" % (start_from, user_cnt))
 
 # start_from = 4000
 # user_cnt = 0
 # slide_windows_days = 4
 # topK = 1000
-min_proba = 0.6
+min_proba = 0.99
 
-n_estimators = 300
+n_estimators = 100
 
 
 log_file = '..\\log\\log.%d.%d.txt' % (start_from, user_cnt)
@@ -251,14 +251,13 @@ print("=====================================================================")
 
 loadRecordsFromRedis(start_from, user_cnt)
 
+# daysBetween1stBehaviorToBuy()
 
-#daysBetween1stBehaviorToBuy()
 
-
-if (user_cnt == 0):
-    window_start_date = datetime.datetime.strptime("2014-12-01", "%Y-%m-%d").date()
-    final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
-else:    
+if (run_for_test == 1):
+    window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
+    final_end_date = datetime.datetime.strptime("2014-12-17", "%Y-%m-%d").date()
+else:
     window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
     final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
 
@@ -269,10 +268,11 @@ slide_windows_models = []
 slide_windows_models, feature_importance = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, True, None)
 
 useful_features = 0
+
 logging.info("After split window, feature_importance is : ")
 for feature_name, idx in g_feature_info.items():
     logging.info("%s : %f" % (feature_name, feature_importance[idx]))
-    if (feature_importance[idx] > 0):
+    if (feature_importance[idx] >= g_min_inportance):
         useful_features += 1
 
 print("=====================================================================")
@@ -334,13 +334,7 @@ m, n = X_train_features.shape
 print("        %s X_train_features by split window models %d, %d " % (getCurrentTime(), m, n))
 
 # EnsembleModel
-
-# 逻辑回归算法
-print("        %s runing LR..." % (getCurrentTime()))
-logisticReg = LogisticRegression()
-logisticReg.fit(X_train_features, Ymat_weight)
-
-
+# GBDT 算法
 params = {'n_estimators': n_estimators, 
           'max_depth': 4,
           'min_samples_split': 1,
@@ -349,15 +343,21 @@ params = {'n_estimators': n_estimators,
           'loss': 'deviance'
           }
 
-# GBDT 算法
+
 # gbdtRegressor = GradientBoostingRegressor(**params)
-print("        %s runing GBDT..." % (getCurrentTime()))
+print("        %s running GBDT..." % (getCurrentTime()))
 gbdtRegressor = GradientBoostingClassifier(**params)
 gbdtRegressor.fit(X_train_features, Ymat_weight)
 
 
+# 逻辑回归算法
+print("        %s running LR..." % (getCurrentTime()))
+logisticReg = LogisticRegression()
+logisticReg.fit(X_train_features, Ymat_weight)
+
+
 # 随机森林算法
-print("        %s runing RF..." % (getCurrentTime()))
+print("        %s running RF..." % (getCurrentTime()))
 rfcls = RandomForestClassifier(n_estimators=n_estimators)
 rfcls.fit(X_train_features, Ymat_weight)
 
@@ -396,9 +396,32 @@ print("        %s forecasting feature matrix %d, %d, sample forecasting %d " % (
 
 np.savetxt("%s\\..\log\\X_forecast_features.txt" % runningPath, X_forecast_features, fmt="%.4f", newline="\n")
 
-findal_predicted_prob = logisticReg.predict_proba(X_forecast_features)
-findal_predicted_prob += gbdtRegressor.predict_proba(X_forecast_features)
-findal_predicted_prob += rfcls.predict_proba(X_forecast_features)
+#  用 RF 过滤 samples
+findal_predicted_prob = rfcls.predict_proba(X_forecast_features)
+filtered_sampls, X_filtered_features = filterSamplesByProbility(samples_forecast, X_forecast_features, findal_predicted_prob, min_proba)
+m, n = np.shape(X_filtered_features)
+print("%s After filtering by Random Forest, shape(X_filtered_features) = (%d, %d), samples = %d" % 
+     (getCurrentTime(), m, n, len(filtered_sampls)))
+if (len(filtered_sampls) == 0):
+    print("        %s No samples after filtering by Random Forest" % (getCurrentTime()))
+    filtered_sampls = samples_forecast
+    X_filtered_features = X_forecast_features
+
+# 用gbdt过滤 samples
+findal_predicted_prob = gbdtRegressor.predict_proba(X_filtered_features)
+filtered_sampls_gbdt, X_filtered_features_gbdt = filterSamplesByProbility(filtered_sampls, X_filtered_features, findal_predicted_prob, min_proba)
+m, n = np.shape(X_filtered_features_gbdt)
+print("%s After filtering by GBDT, shape(X_filtered_features_gbdt) = (%d, %d), samples = %d" % 
+     (getCurrentTime(), m, n, len(filtered_sampls)))
+if (len(filtered_sampls_gbdt) == 0):
+    print("        %s No samples after filtering by GBDT")
+    filtered_sampls_gbdt = filtered_sampls
+    X_filtered_features_gbdt = X_filtered_features
+
+samples_forecast = filtered_sampls_gbdt
+
+# 用逻辑回归预测
+findal_predicted_prob = logisticReg.predict_proba(X_filtered_features_gbdt)
 
 if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()):
 
@@ -421,9 +444,9 @@ if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()
     outputFile = open(output_file_name, encoding="utf-8", mode='w')
     # outputFile.write("user_id,item_id\n")    
     for index in range(topK):
-        if (findal_predicted_prob[prob_desc[index], 1] < min_proba):
-            print("        %s probability %.4f < min_proba %.4f, breaking..." %
-                  (getCurrentTime(), findal_predicted_prob[prob_desc[index], 1], min_proba))
+        prob = findal_predicted_prob[prob_desc[index], 1]
+        if (prob < min_proba):
+            print("        %s findal_predicted_prob[%d] %.4f < min_proba %.4f, breaking..." % (getCurrentTime(), index, prob, min_proba))
             break
 
         outputFile.write("%s,%s,%.4f\n" %

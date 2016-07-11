@@ -44,13 +44,13 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     time_end = time.clock()
     print("        %s feature_days_from_1st_last_behavior_item takes %d seconds, total featurs %d   \r" % (getCurrentTime(), time_end - time_start, total_feature_cnt), end="")
 
-    # [begin date, end date) 期间，总共有多少用户购买了该 item
+    # [begin date, end date) 期间，总共有多少用户在该 item 上进行了各种操作，按照操作数量进行加权，得到 item 上的加权在 category 中的排序
     print("        %s how much users buy this item...   \r" % (getCurrentTime()), end="")
     time_start = time.clock()
-    feature_mat, feature_cnt = feature_how_many_users_bought_item(window_start_date, window_end_date, samples, cal_feature_importance, final_feature_importance, total_feature_cnt)
+    feature_mat, feature_cnt = feature_how_many_users_behavior_item(window_start_date, window_end_date, samples, cal_feature_importance, final_feature_importance, total_feature_cnt)
     total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
     time_end = time.clock()
-    user_cnt_buy_item = feature_mat
+    user_cnt_buy_item = feature_mat[:, 3]
     print("        %s feature_how_many_users_bought takes %d seconds, total featurs %d   \r" % (getCurrentTime(), time_end - time_start, total_feature_cnt), end="")
 
     # [begin date, end date) 期间， item 的销量
@@ -59,7 +59,7 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     feature_mat, feature_cnt = feature_item_sals_volume(window_start_date, window_end_date, samples, cal_feature_importance, final_feature_importance, total_feature_cnt)
     total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
     time_end = time.clock()
-    item_sales_vol = feature_mat
+    item_sales_vol = feature_mat[:, 0]
     print("        %s feature_item_sals_volume takes %d seconds, total featurs %d   \r" % (getCurrentTime(), time_end - time_start, total_feature_cnt), end="")
 
     ##################################################################################################
@@ -126,7 +126,7 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     ###################################### 用户 - category交互属性  ###################################
     ##################################################################################################
     #在 [window_start_date, window_end_dat) 范围内， ， 用户在category 上的购买浏览转化率 购买过的category数量/浏览过的category数量
-    print("        %s calculating user-item b/v ratio..." % getCurrentTime(), end="")
+    print("        %s calculating user-item b/v ratio...\r" % getCurrentTime(), end="")
     time_start = time.clock()
     feature_mat, feature_cnt = feature_buy_view_ratio(window_start_date, window_end_date, samples, cal_feature_importance, final_feature_importance, total_feature_cnt)
     total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
@@ -134,7 +134,7 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     print("        %s feature_buy_view_ratio takes %d seconds, total featurs %d   \r" % (getCurrentTime(), time_end - time_start, total_feature_cnt), end="")
 
     #在 [window_start_date, window_end_dat) 范围内， 用户最后一次操作同类型的商品至 checking_date 的天数
-    print("        %s days of last behavior of category... " % getCurrentTime(), end="")
+    print("        %s days of last behavior of category... \r" % getCurrentTime(), end="")
     time_start = time.clock()
     feature_mat, feature_cnt = feature_last_opt_category(window_start_date, window_end_date, samples, cal_feature_importance, final_feature_importance, total_feature_cnt)
     total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
@@ -170,6 +170,14 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     ##################################################################################################
     #######################################   用户属性   ##############################################
     ##################################################################################################
+    # 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为, 购买/浏览， 购买/收藏， 购买/购物车, 购物车/收藏， 购物车/浏览的比率,
+    # 返回 9 个特征
+    print("        %s how many behavior of user...   \r" % (getCurrentTime()), end="")
+    time_start = time.clock()
+    for i, pre_days in enumerate(pre_days_list):
+        feature_mat, feature_cnt = feature_how_many_behavior_user(pre_days, window_end_date, samples, cal_feature_importance, final_feature_importance, total_feature_cnt)
+        total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
+    time_end = time.clock()
 
     # 用户在 checking date（不包括） 之前每次购买间隔的天数的平均值和方差, 返回两个特征
     print("        %s days between buy of user...   \r" % (getCurrentTime()), end="")
@@ -263,7 +271,6 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
     feature_mat, feature_cnt = feature_buyer_ratio_item_category(user_cnt_buy_item, user_cnt_buy_category, cal_feature_importance, final_feature_importance, total_feature_cnt)
     total_feature_cnt += addSubFeatureMatIntoFeatureMat(feature_mat, feature_cnt, Xmat, total_feature_cnt)
     print("        %s ratio of user cnt buy item/category, total featurs %d   \r" % (getCurrentTime(), total_feature_cnt))
-
     
     print("        %s category behavior count...   \r" % (getCurrentTime()), end="")
     item_behavior_cnt = []
@@ -301,7 +308,7 @@ def createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, 
 
 # 滑动窗口， window_end_date 为 Y， 从 [window_start_date, window_end_date -1] 范围内得到特征矩阵， 通过
 # 训练得到特征的 importance
-def GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, final_feature_importance):
+def GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, final_feature_importance, n_estimators):
     nag_per_pos = 10
     print("%s slide windows from %s to %s   \r" % (getCurrentTime(), window_start_date, window_end_date))
 
@@ -319,7 +326,7 @@ def GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance
 
     # Xmat, Ymat = shuffle(Xmat, Ymat, random_state=13)
 
-    params = {'n_estimators': 500, 
+    params = {'n_estimators': n_estimators, 
               'max_depth': 4,
               'min_samples_split': 1,
               'learning_rate': 0.01, 
