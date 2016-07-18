@@ -140,7 +140,7 @@ def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, v
 
 
 def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos, verify_user_start, verify_user_cnt, topK, min_proba,
-                                  slide_windows_models, logisticReg, gbdtRegressor, rfcls, final_feature_importance):
+                                  slide_windows_models, logisticReg, gbdtRegressor, rfcls, useful_features_idx):
     print("=====================================================================")
     print("============verifyPredictionEnsembleModel %s, %s ===============" % (window_start_date, forecast_date))
     print("=====================================================================")
@@ -160,11 +160,11 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
              'window_end_date' : forecast_date,
              'nag_per_pos' : nag_per_pos, 
              'samples' : verify_samples, 
-             'cal_feature_importance' : False, 
-             'final_feature_importance' : final_feature_importance}
+             'cal_feature_importance' : False}
 
     Xmat_verify = GBDT.createTrainingSet(**params)
     Xmat_verify = preprocessing.scale(Xmat_verify)
+    Xmat_verify = Xmat_verify[:, useful_features_idx]
 
     X_verify_features = Xmat_verify
     for clf_model in slide_windows_models:    

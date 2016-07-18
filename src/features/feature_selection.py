@@ -41,12 +41,11 @@ def featuresForForecasting(features_names, final_feature_importances):
     return useful_features
 
 
-def getUsefulFeatures(during_training, cur_total_feature_cnt, feature_mat, features_names, useful_features):
-    # 若是在训练过程中， 则保留子特征矩阵的所有列, 返回所有的特征名， 并记录下它们在特征矩阵中的索引
+def getUsefulFeatures(during_training, cur_total_feature_cnt, feature_mat, features_names):
+    # 若是在训练过程中， 记录下特征名以及在特征矩阵中的索引
     if (during_training):
         for i, name in enumerate(features_names):
             g_feature_info[name] = cur_total_feature_cnt + i
-        return feature_mat, len(features_names)
-    else:
-        # 不是在训练过程中（在预测过程中）， useful_features 指明了子特征矩阵中的哪些特征是有效的，只返回那些有效的子特征        
-        return feature_mat[:, useful_features], len(useful_features)
+
+    return feature_mat, len(features_names)
+    

@@ -10,7 +10,7 @@ from feature_selection import *
 
 # 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为, 购买/浏览， 购买/收藏， 购买/购物车, 购物车/收藏， 购物车/浏览的比率,
 # 返回 9 个特征
-def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
     begin_date = end_date - datetime.timedelta(pre_days)
     logging.info("entered feature_how_many_behavior_user(%s, %s)" % (begin_date, end_date))
 
@@ -26,15 +26,6 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feat
                       "feature_how_many_behavior_user_cart_view_ratio_%d" % pre_days,
                       "feature_how_many_behavior_user_cart_fav_ratio_%d" % pre_days,
                       ]
-
-    useful_features = None
-    if (not cal_feature_importance):
-        useful_features = featuresForForecasting(features_names, final_feature_importance)
-        if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_how_many_behavior_user] has no useful features")
-            return None, 0
-        else:
-            logging.info("During forecasting, [feature_how_many_behavior_user] has %d useful features" % len(useful_features))
 
     features = len(features_names)
 
@@ -87,7 +78,7 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feat
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     logging.info("leaving feature_how_many_behavior_user")
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, how_many_behavior_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, how_many_behavior_list, features_names)
 
 
 ######################################################################################################
@@ -95,18 +86,10 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs, cal_feat
 ######################################################################################################
 
 # 用户在 checking date（不包括） 之前每次购买间隔的天数的平均值和方差, 返回两个特征
-def feature_mean_days_between_buy_user(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+def feature_mean_days_between_buy_user(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
     logging.info("entered feature_mean_days_between_buy_user(%s, %s)" % (window_start_date, window_end_date))
 
     features_names = ["feature_mean_days_between_buy_user_mean", "feature_mean_days_between_buy_user_variance"]
-    useful_features = None
-    if (not cal_feature_importance):
-        useful_features = featuresForForecasting(features_names, final_feature_importance)
-        if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_mean_days_between_buy_user] has no useful features")
-            return None, 0
-        else:
-            logging.info("During forecasting, [feature_mean_days_between_buy_user] has %d useful features" % len(useful_features))
 
     mean_days_between_buy_dict = dict()
     mean_days_between_list = np.zeros((len(user_item_pairs), 2))
@@ -157,7 +140,7 @@ def feature_mean_days_between_buy_user(window_start_date, window_end_date, user_
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     logging.info("leaving feature_mean_days_between_buy_user")
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, mean_days_between_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, mean_days_between_list, features_names)
 
 
 ######################################################################################################
@@ -188,21 +171,12 @@ def get_last_opt_item_date(user_records, window_start_date, window_end_date, use
 
 
 # [window_start_date, window_end_date) 期间， 用户最后一次行为至 window_end_date （不包括）的天数, 没有该行为则为 0, 返回4个特征
-def feature_last_behavior_user(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+def feature_last_behavior_user(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
     logging.info("entered feature_last_behavior_user(%s, %s)" % (window_start_date, window_end_date))
     features_names = ["feature_last_behavior_user_view", 
                       "feature_last_behavior_user_fav",
                       "feature_last_behavior_user_cart",
                       "feature_last_behavior_user_buy"]
-
-    useful_features = None
-    if (not cal_feature_importance):
-        useful_features = featuresForForecasting(features_names, final_feature_importance)
-        if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_last_behavior_user] has no useful features")
-            return None, 0
-        else:
-            logging.info("During forecasting, [feature_last_behavior_user] has %d useful features" % len(useful_features))
 
     last_behavior_user_dict = dict()
     last_behavior_user_list = np.zeros((len(user_item_pairs), 4))
@@ -231,7 +205,7 @@ def feature_last_behavior_user(window_start_date, window_end_date, user_item_pai
 
     logging.info("leaving feature_last_buy_user")
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, last_behavior_user_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, last_behavior_user_list, features_names)
 
 
 ######################################################################################################
@@ -240,22 +214,13 @@ def feature_last_behavior_user(window_start_date, window_end_date, user_item_pai
 
 #截止到checking_date（不包括）， 用户有多少天进行了各种类型的操作
 # 返回 4 个特征
-def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):    
+def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):    
     logging.info("feature_how_many_days_for_behavior %s -- %s" % (window_start_date, window_end_date))
 
     features_names = ["feature_how_many_days_for_behavior_view", 
                       "feature_how_many_days_for_behavior_fav", 
                       "feature_how_many_days_for_behavior_cart", 
                       "feature_how_many_days_for_behavior_buy"]
-
-    useful_features = None
-    if (not cal_feature_importance):
-        useful_features = featuresForForecasting(features_names, final_feature_importance)
-        if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_how_many_days_for_behavior] has no useful features")
-            return None, 0
-        else:
-            logging.info("During forecasting, [feature_how_many_days_for_behavior] has %d useful features" % len(useful_features))
 
     hwo_many_days_for_behavior_dict = dict()
     hwo_many_days_for_behavior_list = np.zeros((len(user_item_pairs), 4))
@@ -299,7 +264,7 @@ def feature_how_many_days_for_behavior(window_start_date, window_end_date, user_
 
     logging.info("leaving feature_how_many_days_for_behavior")
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, hwo_many_days_for_behavior_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, hwo_many_days_for_behavior_list, features_names)
 
 
 ######################################################################################################
@@ -321,21 +286,12 @@ def buy_list_in_week(user_id, each_day, window_end_date):
 # 用户在同一天内多次购买同一个item算一次
 # 例如 用户在 第1天购买了item1，item2， item3， 然后在第5天又购买了该item1, 第6 天购买了 item2， 第7 天购买了item3，第 8 天有购买了item3
 # 用户购买过item1， item2两次，购买过item3 三次，则buy_in_days_list[2] = 2， buy_in_days_list[3] = 1
-def feature_how_many_buy_in_days(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):    
+def feature_how_many_buy_in_days(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):    
     logging.info("feature_how_many_buy_in_days (%s, %s)" % (window_start_date, window_end_date))
     slide_window_days = (window_end_date - window_start_date).days
     features_names = []
     for day in range(1, slide_window_days + 1):
         features_names.append("feature_how_many_buy_in_days_%d" % day)    
-
-    useful_features = None
-    if (not cal_feature_importance):
-        useful_features = featuresForForecasting(features_names, final_feature_importance)
-        if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_how_many_buy_in_days] has no useful features")
-            return None, 0
-        else:
-            logging.info("During forecasting, [feature_how_many_buy_in_days] has %d useful features" % len(useful_features))
 
     buy_in_days_list = np.zeros((len(user_item_pairs), slide_window_days))
     buy_in_days_dict = dict()
@@ -376,7 +332,7 @@ def feature_how_many_buy_in_days(window_start_date, window_end_date, user_item_p
 
     logging.info("leaving feature_how_many_buy_in_weeks")
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, buy_in_days_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, buy_in_days_list, features_names)
 
 ######################################################################################################
 ######################################################################################################

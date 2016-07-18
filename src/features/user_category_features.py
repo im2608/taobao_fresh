@@ -10,15 +10,12 @@ from feature_selection import *
 
 
 #在 [windw_start_date, window_end_dat) 范围内， user 对 category 购买间隔的平均天数以及方差
-def feature_mean_days_between_buy_user_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
-    feature_name = "feature_mean_days_between_buy_user_category"
-    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
+def feature_mean_days_between_buy_user_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
+    features_names = ["feature_mean_days_between_buy_user_category", "feature_var_days_between_buy_user_category"]
 
     user_category_mean_buy_dict = dict()
 
-    buy_mean_days_list = np.zeros((len(user_item_pairs), 2))
+    buy_mean_days_list = np.zeros((len(user_item_pairs), len(features_names)))
 
     total_cnt = len(user_item_pairs)
     for index in range(len(user_item_pairs)):
@@ -68,21 +65,15 @@ def feature_mean_days_between_buy_user_category(window_start_date, window_end_da
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    if (cal_feature_importance):
-        g_feature_info[feature_name] = cur_total_feature_cnt
-
-    return buy_mean_days_list, 2
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, buy_mean_days_list, features_names)
 
 ######################################################################################################
 ######################################################################################################
 ######################################################################################################
 
 #[window_start_date, window_end_date) 时间内， 用户一共购买过多少同类型的商品
-def feature_how_many_buy_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+def feature_how_many_buy_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
     feature_name = "feature_how_many_buy_category"
-    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
 
     how_many_buy = np.zeros((len(user_item_pairs), 1))
 
@@ -155,19 +146,11 @@ def get_last_opt_category_date(user_records, window_start_date, window_end_date,
 
 # 用户最后一次操作同类型的商品至 window_end_date （不包括） 的天数，返回4个特征
 # todo： 此处有个问题： 如果用户连续购买了同一个item，则此处会有多条相同的购物记录，但是函数中没有处理这种情况
-def feature_last_opt_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+def feature_last_opt_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
     features_names = ["feature_last_opt_category_view", 
                       "feature_last_opt_category_fav", 
                       "feature_last_opt_category_cart", 
                       "feature_last_opt_category_buy"]
-    useful_features = None
-    if (not cal_feature_importance):
-        useful_features = featuresForForecasting(features_names, final_feature_importance)
-        if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_last_opt_category] has no useful features")
-            return None, 0
-        else:
-            logging.info("During forecasting, [feature_last_opt_category] has %d useful features" % len(useful_features))
 
     days_from_last_opt_cat_dict = dict()
     days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), len(features_names)))
@@ -201,7 +184,7 @@ def feature_last_opt_category(window_start_date, window_end_date, user_item_pair
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, days_from_last_opt_cat_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, days_from_last_opt_cat_list, features_names)
 
 
 ######################################################################################################
@@ -210,12 +193,8 @@ def feature_last_opt_category(window_start_date, window_end_date, user_item_pair
 
 
 #截止到checking date(不包括)， 用户在category 上的购买浏览转化率 在category上购买过的数量/浏览过的category数量
-def feature_buy_view_ratio(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+def feature_buy_view_ratio(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
     feature_name = "feature_buy_view_ratio"
-
-    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
 
     buy_view_ratio_dict = dict()
 
@@ -290,32 +269,18 @@ def get_behavior_cnt_of_days_caregory(user_records, pre_days, end_date, behavior
     return behavior_cnt
 # user 在 category 上各个行为的次数以及在item上各个行为的次数占category上次数的比例
 # 返回 8 个特征
-def feature_user_behavior_cnt_on_category(pre_days, window_end_date, user_item_pairs, beahvior_cnt_on_item, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
+def feature_user_behavior_cnt_on_category(pre_days, window_end_date, user_item_pairs, beahvior_cnt_on_item, cal_feature_importance, cur_total_feature_cnt):
     logging.info("feature_user_behavior_cnt_on_category (%d, %s)" % (pre_days, window_end_date))
 
     features_names = ["feature_user_behavior_cnt_on_category_pre_days_%d_view" % pre_days,
                       "feature_user_behavior_cnt_on_category_pre_days_%d_fav" % pre_days,
                       "feature_user_behavior_cnt_on_category_pre_days_%d_cart" % pre_days,
-                      "feature_user_behavior_cnt_on_category_pre_days_%d_buy" % pre_days]
-
-    if (beahvior_cnt_on_item is not None):
-        features_names.extend(
-                      ["feature_user_behavior_cnt_on_category_pre_days_%d_item_ratio_view" % pre_days,
+                      "feature_user_behavior_cnt_on_category_pre_days_%d_buy" % pre_days,
+                      "feature_user_behavior_cnt_on_category_pre_days_%d_item_ratio_view" % pre_days,
                       "feature_user_behavior_cnt_on_category_pre_days_%d_item_ratio_fav" % pre_days,
                       "feature_user_behavior_cnt_on_category_pre_days_%d_item_ratio_cart" % pre_days,
                       "feature_user_behavior_cnt_on_category_pre_days_%d_item_ratio_buy" % pre_days,
-                      ])
-    else:
-        logging.info("feature_user_behavior_cnt_on_category , beahvior_cnt_on_item is None")
-
-    useful_features = None
-    if (not cal_feature_importance):
-        useful_features = featuresForForecasting(features_names, final_feature_importance)
-        if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_last_opt_category] has no useful features")
-            return None, 0
-        else:
-            logging.info("During forecasting, [feature_last_opt_category] has %d useful features" % len(useful_features))
+                      ]
 
     behavior_cnt_list = np.zeros((len(user_item_pairs), len(features_names)))
     behavior_cnt_dict = dict()
@@ -346,7 +311,7 @@ def feature_user_behavior_cnt_on_category(pre_days, window_end_date, user_item_p
 
         # logging.info("user %s, %s %s, behavior on category %s, %s" % (user_id, item_id, beahvior_cnt_on_item[index], item_category, behavior_cnt_list[index]))
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, behavior_cnt_list, features_names, useful_features)
+    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, behavior_cnt_list, features_names)
 
 ######################################################################################################
 ######################################################################################################

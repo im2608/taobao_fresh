@@ -155,31 +155,30 @@ def loadTestingFeaturesFromRedis():
 
 # 若 cal_feature_importance = True， 则累加特征的重要性， 忽略 final_feature_importance
 # 若为 False，则 final_feature_importance 为累加好的特征重要性， 根据特征的重要性在滑动窗口内重新训练model
-def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, cal_feature_importance, final_feature_importance):
+def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, cal_feature_importance):
     window_end_date = window_start_date + datetime.timedelta(slide_windows_days)
 
-    slide_windows_models = []
+    slide_feature_mat_dict = dict()
     feature_importances = None
 
     #滑动窗口 11-18 -- 12-17 得到特征的重要性， 并保留每个滑动窗口训练出的的model
     while (window_end_date < final_end_date):    
-        slide_window_clf = GBDT.GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, final_feature_importance, n_estimators)
+        Xmat, Ymat, slide_window_clf = GBDT.GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, n_estimators)
         if (slide_window_clf == None):
             window_end_date += datetime.timedelta(1)
             window_start_date += datetime.timedelta(1)
             continue
 
-        slide_windows_models.append(slide_window_clf)
-        if (cal_feature_importance):
-            if (feature_importances is None):
-                feature_importances = slide_window_clf.feature_importances_
-            else:
-                feature_importances += slide_window_clf.feature_importances_
+        slide_feature_mat_dict[(window_start_date, window_end_date)] = (Xmat, Ymat)
+        if (feature_importances is None):
+            feature_importances = slide_window_clf.feature_importances_
+        else:
+            feature_importances += slide_window_clf.feature_importances_
 
         window_end_date += datetime.timedelta(1)
         window_start_date += datetime.timedelta(1)
 
-    return slide_windows_models, feature_importances
+    return slide_feature_mat_dict, feature_importances
 
 
 ################################################################################################################
@@ -261,25 +260,48 @@ else:
     window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
     final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
 
-slide_windows_models = []
-
 # 若 cal_feature_importance = True， 则累加特征的重要性， 忽略 final_feature_importance
 # 若为 False，则 final_feature_importance 为累加好的特征重要性， 根据特征的重要性在滑动窗口内重新训练model
-slide_windows_models, feature_importance = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, True, None)
-
-useful_features = 0
+slide_feature_mat_dict, feature_importance = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, True)
 
 logging.info("After split window, feature_importance is : ")
+useful_features_idx = []
 for feature_name, idx in g_feature_info.items():
     logging.info("%s : %f" % (feature_name, feature_importance[idx]))
     if (feature_importance[idx] >= g_min_inportance):
-        useful_features += 1
+        useful_features_idx.append(idx)
+
+logging.info("useful_features_idx %s" % useful_features_idx)
 
 print("=====================================================================")
-print(" training with feature importance slide days (%d) =============" % useful_features)
+print(" training with feature importance slide days (useful features: %d) ==" % len(useful_features_idx))
 print("=====================================================================")
 
-slide_windows_models, _ = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, False, feature_importance)
+slide_windows_models = []
+# 用满足 min importance 的特征重新训练模型, 训练好的模型保存在 slide_windows_models 中
+for window_start_end_date, X_Y_mat in slide_feature_mat_dict.items():
+    window_start_date = window_start_end_date[0]
+    window_end_date = window_start_end_date[1]
+    X_mat = X_Y_mat[0]
+    Y_mat = X_Y_mat[1]
+
+    X_useful_mat = X_mat[:, useful_features_idx]
+
+    params = {'n_estimators': n_estimators, 
+          'max_depth': 4,
+          'min_samples_split': 1,
+          'learning_rate': 0.01, 
+          #'loss': 'ls'
+          'loss': 'deviance'
+          }
+
+    #clf = GradientBoostingRegressor(**params)
+    clf = GradientBoostingClassifier(**params)
+
+    print("%s Using useful features for split windows (%s, %s)\r" % (getCurrentTime(), window_start_date, window_end_date), end ="")
+    clf.fit(X_useful_mat, Y_mat)
+
+    slide_windows_models.append(clf)
 
 nag_per_pos = 10
 
@@ -305,11 +327,13 @@ params = {'window_start_date' : window_start_date,
          'window_end_date' : window_end_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_weight, 
-         'cal_feature_importance' : False, 
-         'final_feature_importance' : feature_importance}
+         'cal_feature_importance' : False}
+
 
 Xmat_weight = GBDT.createTrainingSet(**params)
 Xmat_weight = preprocessing.scale(Xmat_weight)
+Xmat_weight = Xmat_weight[:, useful_features_idx]
+
 m, n = np.shape(Xmat_weight)
 print("        %s matrix for generating weights (%d, %d)" % (getCurrentTime(), m, n))
 
@@ -375,11 +399,10 @@ params = {'window_start_date' : window_start_date,
          'window_end_date' : forecast_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_forecast, 
-         'cal_feature_importance' : False, 
-         'final_feature_importance' : feature_importance}
+         'cal_feature_importance' : False}
 Xmat_forecast = GBDT.createTrainingSet(**params)
 Xmat_forecast = preprocessing.scale(Xmat_forecast)
-
+Xmat_forecast = Xmat_forecast[:, useful_features_idx]
 
 m, n = np.shape(Xmat_forecast)
 print("        %s matrix for generating forecast matrix (%d, %d)" % (getCurrentTime(), m, n))
@@ -471,6 +494,6 @@ else:
               'logisticReg' : logisticReg, 
               'gbdtRegressor' : gbdtRegressor, 
               'rfcls' : rfcls, 
-              'final_feature_importance' : feature_importance}
+              'useful_features_idx' : useful_features_idx}
 
     verify.verifyPredictionEnsembleModel(**params)

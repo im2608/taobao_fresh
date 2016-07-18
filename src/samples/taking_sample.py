@@ -346,7 +346,7 @@ def takeNagetiveSamplesByUserActivity(window_start_date, window_end_date, positi
     user_activity_score_dict, total_activity = calculateUserActivity(window_start_date, window_end_date, user_item_pairs)
     for user_id, user_act_dict in user_activity_score_dict.items():
         nagetive_cnt_of_user = round(user_act_dict["activity"] / total_activity * total_nagetive_cnt + 1)
-        logging.info("user %s's nagetive samples: %d " % (user_id, nagetive_cnt_of_user))
+        # logging.info("user %s's nagetive samples: %d " % (user_id, nagetive_cnt_of_user))
         if (nagetive_cnt_of_user > len(user_act_dict["activity_on_item"])):
             nagetive_cnt_of_user = len(user_act_dict["activity_on_item"])
 

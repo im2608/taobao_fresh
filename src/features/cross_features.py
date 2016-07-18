@@ -6,14 +6,8 @@ from feature_selection import *
 ########################################################################################################
 ########################################################################################################
 # item 的销量占 category 的销量的比例
-def feature_sales_ratio_itme_category(item_sales_vol, category_sales_vol, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
-    if (item_sales_vol is None or category_sales_vol is None):
-        return None, 0
-
+def feature_sales_ratio_itme_category(item_sales_vol, category_sales_vol, cal_feature_importance, cur_total_feature_cnt):
     feature_name = "feature_sales_ratio_itme_category"
-    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
 
     ratio_list = np.zeros((len(item_sales_vol), 1))
    
@@ -38,14 +32,8 @@ def feature_sales_ratio_itme_category(item_sales_vol, category_sales_vol, cal_fe
 ########################################################################################################
 ########################################################################################################
 # item  在各个behavior上的次数占 category 上各个behavior次数的比例
-def feature_behavior_cnt_itme_category(item_behavior_cnt, category_behavior_cnt, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
-    if (item_behavior_cnt is None or category_behavior_cnt is None):
-        return None, 0
-
+def feature_behavior_cnt_itme_category(item_behavior_cnt, category_behavior_cnt, cal_feature_importance, cur_total_feature_cnt):
     feature_name = "feature_behavior_cnt_itme_category"
-    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
 
     ratio_list = np.zeros((len(item_behavior_cnt), 1))
    
@@ -68,14 +56,8 @@ def feature_behavior_cnt_itme_category(item_behavior_cnt, category_behavior_cnt,
 ########################################################################################################
 ########################################################################################################
 # 购买 item 的用户数量占购买 category 的用户数的比例
-def feature_buyer_ratio_item_category(user_cnt_buy_item, user_cnt_buy_category, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
-    if (user_cnt_buy_item is None or  user_cnt_buy_category is None):
-        return None, 0
-
+def feature_buyer_ratio_item_category(user_cnt_buy_item, user_cnt_buy_category, cal_feature_importance, cur_total_feature_cnt):
     feature_name = "feature_buyer_ratio_itme_category"
-    if (not cal_feature_importance and final_feature_importance[g_feature_info[feature_name]] == 0):
-        logging.info("%s has no useful features" % feature_name)
-        return None, 0
 
     ratio_list = np.zeros((len(user_cnt_buy_item), 1))
    
@@ -98,9 +80,7 @@ def feature_buyer_ratio_item_category(user_cnt_buy_item, user_cnt_buy_category, 
 ########################################################################################################
 ########################################################################################################
 # item 的1st, last behavior 与 category 的1st， last 相差的天数
-def feature_1st_last_between_item_category(days_first_last_item, days_first_last_category, cal_feature_importance, final_feature_importance, cur_total_feature_cnt):
-    if (days_first_last_item is None or days_first_last_category is None):
-        return None, 0
+def feature_1st_last_between_item_category(days_first_last_item, days_first_last_category, cal_feature_importance, cur_total_feature_cnt):
 
     features_names = ["feature_1st_between_item_category_view",
                       "feature_1st_between_item_category_fav",
@@ -110,14 +90,6 @@ def feature_1st_last_between_item_category(days_first_last_item, days_first_last
                       "feature_last_between_item_category_fav",
                       "feature_last_between_item_category_cart",
                       "feature_last_between_item_category_buy"]
-
-    if (not cal_feature_importance):
-        useful_features = featuresForForecasting(features_names, final_feature_importance)
-        if (len(useful_features) == 0):
-            logging.info("During forecasting, [feature_1st_last_between_item_category] has no useful features")
-            return None, 0
-        else:
-            logging.info("During forecasting, [feature_1st_last_between_item_category] has %d useful features" % len(useful_features))
 
     days_1st_last_difference_list = np.zeros((len(days_first_last_item), len(features_names)))
     # 1st 的天数用 category 减去 item， category 的1st天数等于或早于item
