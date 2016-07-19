@@ -17,12 +17,6 @@ def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos):
     totoal_nagetive = 0
     positive_users = set()
 
-    # item 的热度
-    # print("        %s calculating popularity..." % getCurrentTime())
-    # #item_popularity_dict = calculate_item_popularity()
-    # item_popularity_dict = calculateItemPopularity(window_start_date, window_end_date)
-    # print("        %s item popularity len is %d" % (getCurrentTime(), len(item_popularity_dict)))
-
     positive_samples = takingPositiveSamplesOnDate(window_start_date, window_end_date)
     for user_item in positive_samples:
         samples.append(user_item)
@@ -306,16 +300,65 @@ def calculateItemPopularity(window_start_date, window_end_date):
 ################################################################################################################
 ################################################################################################################
 
-def getUserItemPairsByUserBehavior(window_start_date, window_end_date, positive_samples):
-    positive_samples = set(positive_samples)
+def takeSamples(window_start_date, window_end_date, only_from_test_set):
+    Ymat = []
+    samples = set()
+    params = {'window_start_date' : window_start_date,
+              'window_end_date' : window_end_date,
+              'samples' : samples, 
+              'user_records' : g_user_buy_transection,
+              'only_from_test_set' : only_from_test_set
+    }
+    takeSamplesByUserBehavior(**params)
 
-    nagetive_samples = list()
-    day_before_end_date = window_end_date - datetime.timedelta(1)
-    for user_id, user_pattern_records in g_user_behavior_patten.items():        
-        for item_id, item_pattern_record in user_pattern_records.items():
-            added_in_sample = False
-            if ((user_id, item_id) in positive_samples or added_in_sample):
+    params = {'window_start_date' : window_start_date,
+              'window_end_date' : window_end_date,
+              'samples' : samples, 
+              'user_records' : g_user_behavior_patten,
+              'only_from_test_set' : only_from_test_set
+    }
+    takeSamplesByUserBehavior(**params)
+
+    samples = list(samples)
+    positive_samples = 0
+    nagetive_samples = 0
+    for user_item in samples:
+        user_id = user_item[0]
+        item_id = user_item[1]
+
+        if (user_id not in g_user_buy_transection or 
+            item_id not in g_user_buy_transection[user_id]):
+            Ymat.append(0)
+            nagetive_samples += 1
+            continue
+
+        added_in_positive = False
+        for each_record in g_user_buy_transection[user_id][item_id]:
+            if (each_record[-1][1].date() == window_end_date):
+                Ymat.append(1)
+                positive_samples += 1
+                added_in_positive = True
                 break
+        if (not added_in_positive):
+            Ymat.append(0)
+            nagetive_samples += 1
+
+    print("        %s taking sample (%s, %s), total %d samles, (%d, 1), (%d, 0)" %        
+          (getCurrentTime(), window_start_date, window_end_date, len(samples), positive_samples, nagetive_samples))
+
+    return samples, Ymat
+
+
+
+# 选择样本规则：
+# 1. user 在 end date 前一天有过操作的item
+# 2. user 在 [begin date, end date 前两天] 有过非浏览操作的item
+# 3. only_from_test_set 表示是否只是从测试集中选择样本
+def takeSamplesByUserBehavior(window_start_date, window_end_date, samples, user_records, only_from_test_set):
+    day_before_end_date = window_end_date - datetime.timedelta(1)
+    for user_id, user_operation_records in user_records.items():
+        for item_id, item_pattern_record in user_operation_records.items():
+            added_in_sample = False
             for each_record in item_pattern_record:
                 if (added_in_sample):
                     break
@@ -324,12 +367,15 @@ def getUserItemPairsByUserBehavior(window_start_date, window_end_date, positive_
                         or
                         (behavior[1].date() >= window_start_date and behavior[1].date() < day_before_end_date and 
                         behavior[0] != BEHAVIOR_TYPE_VIEW)):
-                        nagetive_samples.append((user_id, item_id))
-                        added_in_sample = True
-                        break
-
-    print("takeNagetiveSamplesByUserBehavior take %d nagetive samples" % len(nagetive_samples))
-    return nagetive_samples
+                        if (only_from_test_set):
+                            if (item_id in global_test_item_category):
+                                samples.add((user_id, item_id))
+                                added_in_sample = True
+                                break
+                        else:
+                            samples.add((user_id, item_id))
+                            added_in_sample = True
+                            break
 
 ################################################################################################################
 ################################################################################################################

@@ -313,8 +313,8 @@ def GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance
     print("%s slide windows from %s to %s   \r" % (getCurrentTime(), window_start_date, window_end_date))
 
     print("        %s taking samples for training (%s, %d)   \r" % (getCurrentTime(), window_end_date, nag_per_pos))
-    samples, Ymat = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos)
-    print("        %s samples count %d, Ymat count %d   \r" % (getCurrentTime(), len(samples), len(Ymat)))
+    # samples, Ymat = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos)
+    samples, Ymat = takeSamples(window_start_date, window_end_date, False)
 
     Xmat = createTrainingSet(window_start_date, window_end_date, nag_per_pos, samples, cal_feature_importance)
     if (len(samples) == 0):

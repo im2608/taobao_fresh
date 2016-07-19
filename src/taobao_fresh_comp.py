@@ -153,15 +153,14 @@ def loadTestingFeaturesFromRedis():
 
 
 
-# 若 cal_feature_importance = True， 则累加特征的重要性， 忽略 final_feature_importance
-# 若为 False，则 final_feature_importance 为累加好的特征重要性， 根据特征的重要性在滑动窗口内重新训练model
+#滑动窗口 11-18 -- 12-17 得到并累加特征的重要性， 并保留每个滑动窗口训练时使用的特征矩阵
 def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, cal_feature_importance):
     window_end_date = window_start_date + datetime.timedelta(slide_windows_days)
 
     slide_feature_mat_dict = dict()
     feature_importances = None
 
-    #滑动窗口 11-18 -- 12-17 得到特征的重要性， 并保留每个滑动窗口训练出的的model
+    #滑动窗口 11-18 -- 12-17 得到特征的重要性， 并保留每个滑动窗口训练是使用的特征矩阵
     while (window_end_date < final_end_date):    
         Xmat, Ymat, slide_window_clf = GBDT.GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, n_estimators)
         if (slide_window_clf == None):
@@ -221,6 +220,7 @@ user_cnt = int(sys.argv[2].split("=")[1])
 slide_windows_days = int(sys.argv[3].split("=")[1])
 topK = int(sys.argv[4].split("=")[1])
 run_for_test = int(sys.argv[5].split("=")[1])
+min_proba = float(sys.argv[6].split("=")[1])
 
 # print("start_from %d, user_cnt %d" % (start_from, user_cnt))
 
@@ -228,9 +228,9 @@ run_for_test = int(sys.argv[5].split("=")[1])
 # user_cnt = 0
 # slide_windows_days = 4
 # topK = 1000
-min_proba = 0.99
+# min_proba = 0.5
 
-n_estimators = 100
+n_estimators = 300
 
 
 log_file = '..\\log\\log.%d.%d.txt' % (start_from, user_cnt)
@@ -316,9 +316,8 @@ print("==============  generating weights %s - %s (%d)=======" % (window_start_d
 print("=====================================================================")
 
 
-samples_weight, Ymat_weight = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos)
-
-# samples_weight, Ymat_weight = takingSamplesForForecasting(window_start_date, window_end_date)
+# samples_weight, Ymat_weight = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos)
+samples_weight, Ymat_weight = takeSamples(window_start_date, window_end_date, False)
 
 # 使用重要性 > 0 的特征从 12-08 -- 12-17 生成特征矩阵
 print("        %s forecasting, reading feature matrix from %s -- %s" % (getCurrentTime(), window_start_date, window_end_date))
@@ -393,7 +392,8 @@ print("=====================================================================")
 
 window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
 
-samples_forecast, _ = takingSamplesForForecasting(window_start_date, forecast_date, True)
+# samples_forecast, _ = takingSamplesForForecasting(window_start_date, forecast_date, True)
+samples_forecast, _ = takeSamples(window_start_date, forecast_date, True)
 
 params = {'window_start_date' : window_start_date, 
          'window_end_date' : forecast_date,
@@ -435,7 +435,7 @@ findal_predicted_prob = gbdtRegressor.predict_proba(X_filtered_features)
 filtered_sampls_gbdt, X_filtered_features_gbdt = filterSamplesByProbility(filtered_sampls, X_filtered_features, findal_predicted_prob, min_proba)
 m, n = np.shape(X_filtered_features_gbdt)
 print("%s After filtering by GBDT, shape(X_filtered_features_gbdt) = (%d, %d), samples = %d" % 
-     (getCurrentTime(), m, n, len(filtered_sampls)))
+      (getCurrentTime(), m, n, len(filtered_sampls_gbdt)))
 if (len(filtered_sampls_gbdt) == 0):
     print("        %s No samples after filtering by GBDT")
     filtered_sampls_gbdt = filtered_sampls

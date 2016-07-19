@@ -119,7 +119,7 @@ def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, v
     item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
 
     verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date, False)
-    
+
     print("%s creating verifying feature matrix..." % (getCurrentTime()))
     Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, False)
     Xmat_verify = preprocessing.scale(Xmat_verify)
@@ -150,9 +150,8 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
     print("%s reloading verifying users..." % (getCurrentTime()))
     loadRecordsFromRedis(verify_user_start, verify_user_cnt)
 
-    # item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
-
-    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date, False)
+    # verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date, False)
+    verify_samples, _ = takeSamples(window_start_date, forecast_date, False)
 
     print("%s creating verifying feature matrix..." % (getCurrentTime()))
 

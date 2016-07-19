@@ -302,7 +302,7 @@ def feature_how_many_users_behavior_item(window_start_date, window_end_date, use
 
         how_many_users_behavior_item[index, 4] = behavior_weight_on_item[item_category][item_id]
 
-        logging.info("users count behavior on item %s %s" % (item_id, how_many_users_behavior_item[index]))
+        # logging.info("users count behavior on item %s %s" % (item_id, how_many_users_behavior_item[index]))
 
     return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, how_many_users_behavior_item, features_names)
 
@@ -324,8 +324,8 @@ def get_item_sale_vol_in_category(window_start_date, window_end_date):
                     sales_vol += 1
 
         items_sales_vol_in_category[item_category][item_id] = sales_vol
-        logging.info("get_item_sale_vol_in_category(%s, %s), category %s, item %s, sale vol %d" %
-                     (window_start_date, window_end_date, item_category, item_id, sales_vol))
+        # logging.info("get_item_sale_vol_in_category(%s, %s), category %s, item %s, sale vol %d" %
+        #              (window_start_date, window_end_date, item_category, item_id, sales_vol))
 
     for item_category in items_sales_vol_in_category:
         # 在 category 内部按照 item 的销量排序
@@ -357,6 +357,6 @@ def feature_item_sals_volume(window_start_date, window_end_date, user_item_pairs
             sals_volume_list[index, 0] = items_sales_vol_in_category[item_category][item_id][0]
             sals_volume_list[index, 1] = items_sales_vol_in_category[item_category][item_id][1]
 
-        logging.info("%s item sales volume %s " % (item_id, sals_volume_list[index]))
+        # logging.info("%s item sales volume %s " % (item_id, sals_volume_list[index]))
 
     return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, sals_volume_list, features_names)
