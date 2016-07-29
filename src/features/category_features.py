@@ -2,6 +2,7 @@ from common import *
 import numpy as np
 import time
 from feature_selection import *
+from sklearn.preprocessing import OneHotEncoder
 
 ################################################################################################
 ################################################################################################
@@ -35,30 +36,11 @@ def get_everyday_behavior_cnt_of_category(window_start_date, window_end_date, it
 # 前 pre_days 天， category 上 各个behavior 的总次数, 平均每天的点击数以及方差
 
 # 返回 17 个特征
-def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
+def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs):
     logging.info("feature_beahvior_cnt_on_category(%d, %s)" % (pre_days, window_end_date))
-    features_names = ["feature_beahvior_cnt_on_category_%d_view" % pre_days, 
-                      "feature_beahvior_cnt_on_category_%d_fav" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_cart" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_buy" % pre_days,
 
-                      "feature_beahvior_cnt_on_category_%d_view_mean" % pre_days, 
-                      "feature_beahvior_cnt_on_category_%d_fav_mean" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_cart_mean" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_buy_mean" % pre_days,
-
-                      "feature_beahvior_cnt_on_category_%d_view_var" % pre_days, 
-                      "feature_beahvior_cnt_on_category_%d_fav_var" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_cart_var" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_buy_var" % pre_days,
-
-                      "feature_beahvior_cnt_on_category_%d_buy_view" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_buy_fav" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_buy_cart" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_cart_view" % pre_days,
-                      "feature_beahvior_cnt_on_category_%d_cart_fav" % pre_days,
-                      ]
-
+    features_cnt = 17
+  
     window_start_date = window_end_date - datetime.timedelta(pre_days)
 
     time_for_every_day1 = 0
@@ -66,7 +48,7 @@ def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs,
     time_for_calculating = 0
 
     category_behavior_cnt_dict = dict()
-    category_behavior_cnt_list = np.zeros((len(user_item_pairs), len(features_names)))
+    category_behavior_cnt_list = np.zeros((len(user_item_pairs), features_cnt))
     slide_window_days = (window_end_date - window_start_date).days
 
     total_cnt = len(user_item_pairs)
@@ -95,7 +77,7 @@ def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs,
 
         #0 -- 3 为行为总数， 4--7 为行为每天的平均数， 8--11 为行为的方差
         start_time = time.clock()
-        behavior_cnt_mean_var = [0 for x in range(len(features_names))]
+        behavior_cnt_mean_var = [0 for x in range(features_cnt)]
         for i in range(4):
             behavior_cnt_mean_var[i] = np.sum(behavior_cnt_every_day[i])
             behavior_cnt_mean_var[i + 4] = round(np.mean(behavior_cnt_every_day[i]), 2)
@@ -129,8 +111,10 @@ def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs,
 
     # print("every day1 %d, every day2 %d, calculated %d" % (time_for_every_day1, time_for_every_day2, time_for_calculating))
 
+    category_behavior_cnt_list = preprocessing.scale(category_behavior_cnt_list)
+
     logging.info("leaving feature_beahvior_cnt_on_category")
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, category_behavior_cnt_list, features_names)
+    return category_behavior_cnt_list
 
 ################################################################################################
 ################################################################################################
@@ -176,25 +160,13 @@ def get_category_1st_last_behavior_date(window_start_date, window_end_date, item
 
 
 # category 第一次, 最后一次 behavior 距离checking date 的天数, 以及 behavior 第一次, 最后一次之间的天数， 返回 12 个特征
-def feature_days_from_1st_last_behavior_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
+def feature_days_from_1st_last_behavior_category(window_start_date, window_end_date, user_item_pairs):
     logging.info("feature_days_from_1st_last_behavior_category (%s, %s)" % (window_start_date, window_end_date))
 
-    features_names = ["feature_days_from_1st_behavior_categroy_view", 
-                      "feature_days_from_1st_behavior_categroy_fav", 
-                      "feature_days_from_1st_behavior_categroy_cart", 
-                      "feature_days_from_1st_behavior_categroy_buy",
-                      "feature_days_from_last_behavior_categroy_view", 
-                      "feature_days_from_last_behavior_categroy_fav", 
-                      "feature_days_from_last_behavior_categroy_cart", 
-                      "feature_days_from_last_behavior_categroy_buy",
-                      "feature_days_between_1st_last_behavior_categroy_view", 
-                      "feature_days_between_1st_last_behavior_categroy_fav", 
-                      "feature_days_between_1st_last_behavior_categroy_cart", 
-                      "feature_days_between_1st_last_behavior_categroy_buy"]
-
+    features_cnt = 12
 
     days_from_1st_last_dict = dict()
-    days_from_1st_last_list = np.zeros((len(user_item_pairs), len(features_names)))
+    days_from_1st_last_list = np.zeros((len(user_item_pairs), features_cnt))
 
     total_cnt = len(user_item_pairs)
     for index in range(len(user_item_pairs)):
@@ -237,20 +209,25 @@ def feature_days_from_1st_last_behavior_category(window_start_date, window_end_d
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, days_from_1st_last_list, features_names)
+    # 因为之后要做交叉特征， category 的第一次, 最后一次 behavior 距离checking date 的天数 先不做归一化，做完交叉特征之后再做
+    days_from_1st_last_list[:, 8:12] = preprocessing.scale(days_from_1st_last_list[:, 8:12])
+
+    return days_from_1st_last_list
 
 ################################################################################################
 ################################################################################################
 ################################################################################################
 
-# [begin date, end date) 期间，总共有多少用户购买了该 category
-def feature_how_many_users_bought_category(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
+# [begin date, end date) 期间，总共有多少用户购买了该 category, 以及购买category的用户数在所有cagetory中的排序
+def feature_how_many_users_bought_category(window_start_date, window_end_date, user_item_pairs):
     logging.info("feature_how_many_users_bought_category (%s, %s)" % (window_start_date, window_end_date))
 
-    feature_name = "feature_how_many_users_bought_category"
-
     how_many_users_bought_dict = dict()
-    how_many_users_bought_list = np.zeros((len(user_item_pairs), 1))
+
+    # 第一列为用户数，第二列为排序
+    how_many_users_bought_list = np.zeros((len(user_item_pairs), 2))
+
+    users_cnt_bought_category = dict()
 
     for index in range(len(user_item_pairs)):
         user_id = user_item_pairs[index][0]
@@ -259,7 +236,7 @@ def feature_how_many_users_bought_category(window_start_date, window_end_date, u
         item_category = global_train_item_category[item_id]
 
         if (item_category in how_many_users_bought_dict):
-            how_many_users_bought_list[index] = how_many_users_bought_dict[item_category]
+            how_many_users_bought_list[index, 0] = how_many_users_bought_dict[item_category]
             continue
 
         items_of_category = global_train_category_item[item_category]
@@ -279,32 +256,61 @@ def feature_how_many_users_bought_category(window_start_date, window_end_date, u
 
         user_cnt = len(users_bought_item)
         how_many_users_bought_dict[item_id] = user_cnt
-        how_many_users_bought_list[index] = user_cnt
+        users_cnt_bought_category[item_category] = user_cnt        
+        how_many_users_bought_list[index, 0] = user_cnt
 
-        # logging.info("%d users bought category %s" % (user_cnt, item_category))
+    sorted_users_bought_category = sorted(users_cnt_bought_category.items(), key=lambda item:item[1], reverse=True)
 
-    if (cal_feature_importance):
-        g_feature_info[feature_name] = cur_total_feature_cnt
-
-    logging.info("leaving feature_how_many_users_bought_category")
-    return how_many_users_bought_list, 1
-
-################################################################################################
-################################################################################################
-################################################################################################
-# [begin date, end date) 期间， category 的销量
-def feature_category_sals_volume(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
-    logging.info("feature_category_sals_volume (%s, %s)" % (window_start_date, window_end_date))
-
-    feature_name = "feature_category_sals_volume"
-
-    sals_volume_dict = dict()
-    sals_volume_list = np.zeros((len(user_item_pairs), 1))
+    # 购买category的用户数相同，排序也相同
+    rank = 1
+    cur_user_cnt = sorted_users_bought_category[0][1]
+    for category_user_cnt in sorted_users_bought_category:
+        category = category_user_cnt[0]
+        user_cnt = category_user_cnt[1]
+        if (user_cnt < cur_user_cnt):
+            cur_user_cnt = user_cnt
+            rank += 1
+        users_cnt_bought_category[category] = rank
 
     for index in range(len(user_item_pairs)):
         item_id = user_item_pairs[index][1]
+        item_category = global_train_item_category[item_id]
+        how_many_users_bought_list[index, 1] = users_cnt_bought_category[item_category]
+
+        # logging.info("%d users bought category %s" % (user_cnt, item_category))
+
+    # 将排序做onehot编码
+    rank_onehot = oneHotEncodeRank(how_many_users_bought_list[:, 1])
+
+    feature_mat = np.column_stack((how_many_users_bought_list[:, 0], rank_onehot))
+
+    logging.info("leaving feature_how_many_users_bought_category, features_cnt %d" % rank_onehot.shape[1])
+    return rank_onehot
+
+################################################################################################
+################################################################################################
+################################################################################################
+# [begin date, end date) 期间， category 的销量, 以及销量的排序
+def feature_category_sals_volume(window_start_date, window_end_date, user_item_pairs):
+    logging.info("feature_category_sals_volume (%s, %s)" % (window_start_date, window_end_date))
+
+    pairs_count = len(user_item_pairs)
+
+    sals_volume_dict = dict()
+    # 第一列为销量， 第二列为排序
+    sals_volume_list = np.zeros((pairs_count, 2))
+
+    # category的index，供记录排序使用
+    category_index_dict = dict()
+
+    for index in range(pairs_count):
+        item_id = user_item_pairs[index][1]
 
         item_category = global_train_item_category[item_id]
+        if (item_category not in category_index_dict):
+            category_index_dict[item_category] = []
+
+        category_index_dict[item_category].append(index)
 
         if (item_category in sals_volume_dict):
             sals_volume_list[index] = sals_volume_dict[item_category]
@@ -318,16 +324,29 @@ def feature_category_sals_volume(window_start_date, window_end_date, user_item_p
                 continue
             for user_id, item_buy_records in g_user_buy_transection_item[item_id].items():
                 for each_record in item_buy_records:
-                    if (each_record[-1][1].date() > window_start_date and each_record[-1][1].date() < window_end_date):
+                    if (each_record[-1][1].date() >= window_start_date and each_record[-1][1].date() < window_end_date):
                         sales_vol += 1
 
-        sals_volume_dict[item_id] = sales_vol
+        sals_volume_dict[item_category] = sales_vol
         sals_volume_list[index] = sales_vol
         # logging.info("%s category sales volume %d " % (item_id, sals_volume_list[index]))
 
-    if (cal_feature_importance):
-        g_feature_info[feature_name] = cur_total_feature_cnt
+    # category 销量的排序
+    sorted_sale_vol = sorted(sals_volume_dict.items(), key=lambda item:item[1], reverse=True)    
+    sorted_rank = getRankFromSortedTuple(sorted_sale_vol)
+    for i, rank in enumerate(sorted_rank):
+        item_category = sorted_sale_vol[i][0]
+        for category_idx in category_index_dict[item_category]:
+            sals_volume_list[category_idx, 1] = rank
 
-    logging.info("leaving feature_category_sals_volume")
+    sals_volume_list[:, 0] = preprocessing.scale(sals_volume_list[:, 0])
 
-    return sals_volume_list, 1
+    logging.info("oneHotEncodeRank feature_category_sals_volume sals_volume_list[:, 1] %d" % np.max(sals_volume_list[:, 1]))
+
+    rank_onehot = oneHotEncodeRank(sals_volume_list[:, 1])
+
+    feature_mat = np.column_stack((sals_volume_list[:, 0], rank_onehot))
+
+    logging.info("leaving feature_category_sals_volume, features_cnt %d" % feature_mat.shape[1])
+
+    return feature_mat

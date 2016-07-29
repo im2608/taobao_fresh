@@ -67,11 +67,15 @@ def calcuatingF1(forecast_date, predicted_user_item, actual_user_item):
 
     hit_count = 0
     user_hit_list = set()
+    rank_of_hit_count = []
 
-    for user_item in predicted_user_item:
-        logging.info("predicted %s, %s" % (user_item[0], user_item[1]))
+    for user_item_index in predicted_user_item:
+        user_item = user_item_index[0]
+        index = user_item_index[1]
+        logging.info("predicted %s, %s, %d" % (user_item[0], user_item[1], index))
         if (user_item in actual_user_item):
             hit_count += 1
+            rank_of_hit_count.append(index)
 
     for user_item in predicted_user_item:
         for user_item2 in actual_user_item:
@@ -83,8 +87,8 @@ def calcuatingF1(forecast_date, predicted_user_item, actual_user_item):
     for user_item in actual_user_item:
         logging.info("acutal buy %s, %s" % (user_item[0], user_item[1]))
 
-    print("forecasting date %s, positive count %d, predicted count %d, hit count %d" %\
-          (forecast_date, actual_count, predicted_count, hit_count))
+    print("forecasting date %s, positive count %d, predicted count %d, hit count %d, rank of hit counts %s" %\
+          (forecast_date, actual_count, predicted_count, hit_count, rank_of_hit_count))
 
     if (predicted_count != 0):
         p = hit_count / predicted_count
@@ -131,7 +135,7 @@ def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, v
     predicted_user_item = []
     for index in range(len(predicted_prob)):
         if (predicted_prob[index][1] >= min_proba):
-            predicted_user_item.append(verify_samples[index])
+            predicted_user_item.append((verify_samples[index], index))
 
     actual_user_item = takingPositiveSamples(forecast_date)
 
@@ -151,7 +155,7 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
     loadRecordsFromRedis(verify_user_start, verify_user_cnt)
 
     # verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date, False)
-    verify_samples, _ = takeSamples(window_start_date, forecast_date, False)
+    verify_samples, _ = takeSamples(window_start_date, forecast_date, nag_per_pos, False)
 
     print("%s creating verifying feature matrix..." % (getCurrentTime()))
 
@@ -159,16 +163,19 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
              'window_end_date' : forecast_date,
              'nag_per_pos' : nag_per_pos, 
              'samples' : verify_samples, 
-             'cal_feature_importance' : False}
+             # 'cal_feature_importance' : False}
+             }
 
     Xmat_verify = GBDT.createTrainingSet(**params)
-    Xmat_verify = preprocessing.scale(Xmat_verify)
     Xmat_verify = Xmat_verify[:, useful_features_idx]
 
     X_verify_features = Xmat_verify
-    for clf_model in slide_windows_models:    
-        # grd_enc.fit(clf_model.apply(Xmat_verify))
-        # X_verify_enc = grd_enc.transform(clf_model.apply(Xmat_verify)).toarray()
+    for X_useful_mat_clf_model in slide_windows_models:
+        X_useful_mat = X_useful_mat_clf_model[0]
+        clf_model = X_useful_mat_clf_model[1]
+        slide_windows_start = X_useful_mat_clf_model[2][0]
+        slide_windows_end = X_useful_mat_clf_model[2][1]
+
         X_verify_enc = clf_model.apply(Xmat_verify)[:, :, 0]
         X_verify_features = np.column_stack((X_verify_features, X_verify_enc))
 
@@ -176,32 +183,33 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
 
     print("Verify featurs shape (%d, %d)" % (m, n))
 
-    findal_predicted_prob = rfcls.predict_proba(X_verify_features)
-    filtered_sampls, X_filtered_features = filterSamplesByProbility(verify_samples, X_verify_features, findal_predicted_prob, min_proba)
-    m, n = np.shape(X_filtered_features)
-    print("%s After filtering by Random Forecast, shape(X_filtered_features) = (%d, %d), samples = %d" % 
-         (getCurrentTime(), m, n, len(filtered_sampls)))
-    if (len(filtered_sampls) == 0):
-        print("        %s No samples after filtering by Logistic Regression")
-        filtered_sampls = verify_samples
-        X_filtered_features = X_verify_features
+    # findal_predicted_prob = rfcls.predict_proba(X_verify_features)
+    # filtered_sampls, X_filtered_features = filterSamplesByProbility(verify_samples, X_verify_features, findal_predicted_prob, min_proba)
+    # m, n = np.shape(X_filtered_features)
+    # print("%s After filtering by Random Forecast, shape(X_filtered_features) = (%d, %d), samples = %d" % 
+    #      (getCurrentTime(), m, n, len(filtered_sampls)))
+    # if (len(filtered_sampls) == 0):
+    #     print("        %s No samples after filtering by Logistic Regression")
+    #     filtered_sampls = verify_samples
+    #     X_filtered_features = X_verify_features
 
-    findal_predicted_prob = gbdtRegressor.predict_proba(X_filtered_features)
-    filtered_sampls_gbdt, X_filtered_features_gbdt = filterSamplesByProbility(filtered_sampls, X_filtered_features, findal_predicted_prob, min_proba)
-    m, n = np.shape(X_filtered_features_gbdt)
-    print("%s After filtering by GBDT, shape(X_filtered_features) = (%d, %d), samples = %d" % 
-         (getCurrentTime(), m, n, len(filtered_sampls)))
-    if (len(filtered_sampls_gbdt) == 0):
-        print("        %s No samples after filtering by GBDT")
-        filtered_sampls_gbdt = filtered_sampls
-        X_filtered_features_gbdt = X_filtered_features
+    # findal_predicted_prob = gbdtRegressor.predict_proba(X_filtered_features)
+    # filtered_sampls_gbdt, X_filtered_features_gbdt = filterSamplesByProbility(filtered_sampls, X_filtered_features, findal_predicted_prob, min_proba)
+    # m, n = np.shape(X_filtered_features_gbdt)
+    # print("%s After filtering by GBDT, shape(X_filtered_features) = (%d, %d), samples = %d" % 
+    #      (getCurrentTime(), m, n, len(filtered_sampls)))
+    # if (len(filtered_sampls_gbdt) == 0):
+    #     print("        %s No samples after filtering by GBDT")
+    #     filtered_sampls_gbdt = filtered_sampls
+    #     X_filtered_features_gbdt = X_filtered_features
 
-    findal_predicted_prob = logisticReg.predict_proba(X_filtered_features_gbdt)
+    # findal_predicted_prob = logisticReg.predict_proba(X_filtered_features_gbdt)
+    # verify_samples = filtered_sampls_gbdt
+
+    findal_predicted_prob = logisticReg.predict_proba(X_verify_features)
 
     # 按照 probability 降序排序
     prob_desc = np.argsort(-findal_predicted_prob[:, 1])
-
-    verify_samples = filtered_sampls_gbdt
 
     if (len(verify_samples) < topK):
         topK = round(len(verify_samples) / 2)
@@ -217,7 +225,7 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
                   (getCurrentTime(), findal_predicted_prob[prob_desc[index], 1], min_proba))
             break
         user_item = verify_samples[prob_desc[index]]
-        predicted_user_item.append(user_item)
+        predicted_user_item.append((user_item, index))
 
     actual_user_item = takingPositiveSamplesOnDate(window_start_date, forecast_date)
 

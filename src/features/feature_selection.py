@@ -7,7 +7,7 @@ g_feature_info = dict()
 # 矩阵中每个feature 的重要性
 g_features_importance = []
 
-g_min_inportance = 0.01
+g_min_inportance = 0.05
 
 def accumulateFeatureImportance(feature_importances_):
     global g_features_importance

@@ -1,4 +1,5 @@
 import sys
+from sklearn.preprocessing import OneHotEncoder
 
 runningPath = sys.path[0]
 sys.path.append("%s\\LR-hit\\" % runningPath)
@@ -13,6 +14,7 @@ import datetime
 import logging
 import redis
 import numpy as np
+from sklearn import preprocessing
 
 USER_ID = "user_id"
 ITEM_ID = "item_id"
@@ -53,18 +55,13 @@ global_user_behavior_cnt = dict()
 
 redis_cli = redis.Redis(host='10.57.14.7', port=6379, db=0)
 
+# category的数量
+category_cnt = 9557
 
-# CRITICAL 50
-# ERROR    40
-# WARNING  30
-# INFO     20
-# DEBUG    10
-# NOTSET   0
-# logging.basicConfig(level=logging.INFO,\
-#                     format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',\
-#                     datefmt='%a, %d %b %Y %H:%M:%S',\
-#                     filename='..\\log\\log.test.txt',\
-#                     filemode='w')
+# 在category中最多有多少item
+max_item_in_category = 786870
+
+
 
 def loadData(train_user_file_name = tianchi_fresh_comp_train_user):
     filehandle1 = open(train_user_file_name, encoding="utf-8", mode='r')
@@ -440,10 +437,10 @@ g_users_for_alog = []
 g_prob_bwteen_1st_days_and_buy = {1:0.0571, 2:0.032, 3:0.0221, 4:0.0164, 5:0.0138, 6:0.0098, 7:0.0089, 8:0.0077, 9:0.0062, 10:0.0055}
 
 
-g_behavior_weight = {BEHAVIOR_TYPE_VIEW : 0.01,
-                     BEHAVIOR_TYPE_FAV  : 0.33, 
-                     BEHAVIOR_TYPE_CART : 0.47,
-                     BEHAVIOR_TYPE_BUY  : 0.94}
+g_behavior_weight = {BEHAVIOR_TYPE_VIEW : 1,
+                     BEHAVIOR_TYPE_FAV  : 33, 
+                     BEHAVIOR_TYPE_CART : 47,
+                     BEHAVIOR_TYPE_BUY  : 94}
 
 # 每条购物记录在 redis 中都表现为字符串 
 #"[ [(1, 2014-01-01 23, 35), (2, 2014-01-02 22, 1)], [(1, 2014-01-02 23, 35), (2, 2014-01-03 14, 1)] ]"
@@ -656,3 +653,79 @@ def filterSamplesByProbility(samples, forecast_features, probability, min_proba)
             filtered_features.append(index)
 
     return filtered_samples, forecast_features[filtered_features, :]
+
+# 从按照降序排好序的tuple中返回次序
+# 如： [(id1, 100), (id2, 100), (id3, 90), (id4, 90), (id5, 80), (id6, 70)] =>
+# [1, 1, 2, 2, 3, 4]
+def getRankFromSortedTuple(sorted_tuple):
+    rank = 1
+    cur_val = sorted_tuple[0][1]
+    sorted_rank = []
+    for sorted_val in sorted_tuple:
+        if (sorted_val[1] < cur_val):
+            cur_val = sorted_val[1]
+            rank += 1
+        sorted_rank.append(rank)
+    return sorted_rank
+
+
+# 对排序进行onehot 编码，这里假设排序名次最多为 max_rank
+g_rank_onehot_enc = OneHotEncoder()
+max_rank = 150
+
+tmp = [x for x in range(max_rank)]
+tmp = np.array(tmp).reshape(-1, 1)
+g_rank_onehot_enc.fit(tmp)
+
+def oneHotEncodeRank(rank):
+    rank = np.array(rank).reshape(-1, 1)
+    rank_onehot = g_rank_onehot_enc.transform(rank).toarray()
+
+    return rank_onehot
+
+
+
+
+def calculateUserActivity(window_start_date, window_end_date, user_records, user_activity_score_dict, user_item_pairs):
+
+    if ("total_activity" not in user_activity_score_dict):
+        user_activity_score_dict["total_activity"] = 0
+
+    for user_item in user_item_pairs:
+        user_id = user_item[0]
+        item_id = user_item[1]
+
+        if (user_id not in user_records or 
+            item_id not in user_records[user_id]):        
+            continue
+
+        if (user_id not in user_activity_score_dict):
+            user_activity_score_dict[user_id] = dict()
+            user_activity_score_dict[user_id]["activity_on_item"] = []
+            user_activity_score_dict[user_id]["activity"] = 0            
+
+        user_activiey_on_item = 0
+        for each_record in user_records[user_id][item_id]:
+            for behavior in each_record:
+                if (behavior[1].date() >= window_start_date and 
+                    behavior[1].date() < window_end_date):
+                    days = (window_end_date - behavior[1].date()).days
+                    # 用户在item上的行为次数 * 行为的权值 * 行为日至购买日之间的天数导致购买的可能性 = 用户在item上的分数， 分数越高，用户对item越感兴趣
+                    user_activiey_on_item += behavior[2] * g_behavior_weight[behavior[0]] * g_prob_bwteen_1st_days_and_buy[days]
+
+        user_activity_score_dict[user_id]["activity_on_item"].append((item_id, user_activiey_on_item))
+        user_activity_score_dict[user_id]["activity"] += user_activiey_on_item
+        user_activity_score_dict["total_activity"] += user_activiey_on_item
+
+    # 按照用户对item的分数从高到低排序
+    for user_id, item_score in user_activity_score_dict.items():
+        if (user_id == "total_activity"):
+            continue
+
+        user_activity_score_dict[user_id]["activity_on_item"] = sorted(item_score["activity_on_item"], key=lambda item:item[1], reverse=True)
+        # logging.info("user activity %s %.2f activity %s" % 
+        #              (user_id, 
+        #               user_activity_score_dict[user_id]["activity"], 
+        #               user_activity_score_dict[user_id]["activity_on_item"]))
+
+    return

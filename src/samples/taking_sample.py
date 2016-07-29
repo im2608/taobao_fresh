@@ -74,9 +74,9 @@ def takingPositiveSamplesOnDate(window_start_date, buy_date):
                     positive_samples.add((user_id, item_id))
         index += 1
 
-    positive_samples_in_validate = list(positive_samples)
+    # positive_samples_in_validate = list(positive_samples)
     print("        %s positive smaple %d" % (getCurrentTime(), len(positive_samples)))
-    return positive_samples_in_validate
+    return positive_samples
 
 
 
@@ -300,51 +300,35 @@ def calculateItemPopularity(window_start_date, window_end_date):
 ################################################################################################################
 ################################################################################################################
 
-def takeSamples(window_start_date, window_end_date, only_from_test_set):
+def takeSamples(window_start_date, window_end_date, nag_per_pos, during_forecasting):
     Ymat = []
     samples = set()
-    params = {'window_start_date' : window_start_date,
-              'window_end_date' : window_end_date,
-              'samples' : samples, 
-              'user_records' : g_user_buy_transection,
-              'only_from_test_set' : only_from_test_set
-    }
-    takeSamplesByUserBehavior(**params)
+
+    positive_samples = takingPositiveSamplesOnDate(window_start_date, window_end_date)
+
+    Ymat.extend([1 for x in range(len(positive_samples))])
 
     params = {'window_start_date' : window_start_date,
               'window_end_date' : window_end_date,
-              'samples' : samples, 
               'user_records' : g_user_behavior_patten,
-              'only_from_test_set' : only_from_test_set
+              'during_forecasting' : during_forecasting
     }
-    takeSamplesByUserBehavior(**params)
+    nagetive_samples = takeSamplesByUserBehavior(**params)
 
-    samples = list(samples)
-    positive_samples = 0
-    nagetive_samples = 0
-    for user_item in samples:
-        user_id = user_item[0]
-        item_id = user_item[1]
+    # 从负样本集中去掉 在正样本集中出现的样本
+    tmp = nagetive_samples.union(positive_samples) ^ (positive_samples ^ nagetive_samples)
+    nagetive_samples = nagetive_samples ^ tmp
 
-        if (user_id not in g_user_buy_transection or 
-            item_id not in g_user_buy_transection[user_id]):
-            Ymat.append(0)
-            nagetive_samples += 1
-            continue
+    # 在负样本集中根据用户的活跃度进行采样
+    if (not during_forecasting):
+        nagetive_samples = takeSamplesByUserActivity(window_start_date, window_end_date, nagetive_samples, nag_per_pos * len(positive_samples))
 
-        added_in_positive = False
-        for each_record in g_user_buy_transection[user_id][item_id]:
-            if (each_record[-1][1].date() == window_end_date):
-                Ymat.append(1)
-                positive_samples += 1
-                added_in_positive = True
-                break
-        if (not added_in_positive):
-            Ymat.append(0)
-            nagetive_samples += 1
+    Ymat.extend([0 for x in range(len(nagetive_samples))])
 
-    print("        %s taking sample (%s, %s), total %d samles, (%d, 1), (%d, 0)" %        
-          (getCurrentTime(), window_start_date, window_end_date, len(samples), positive_samples, nagetive_samples))
+    samples = list(positive_samples.union(nagetive_samples))
+
+    print("        %s takeSamples, %d / %d, total %d / %d" % 
+          (getCurrentTime(), len(positive_samples), len(nagetive_samples), len(samples), len(Ymat)))
 
     return samples, Ymat
 
@@ -354,7 +338,8 @@ def takeSamples(window_start_date, window_end_date, only_from_test_set):
 # 1. user 在 end date 前一天有过操作的item
 # 2. user 在 [begin date, end date 前两天] 有过非浏览操作的item
 # 3. only_from_test_set 表示是否只是从测试集中选择样本
-def takeSamplesByUserBehavior(window_start_date, window_end_date, samples, user_records, only_from_test_set):
+def takeSamplesByUserBehavior(window_start_date, window_end_date, user_records, during_forecasting):
+    samples = set()
     day_before_end_date = window_end_date - datetime.timedelta(1)
     for user_id, user_operation_records in user_records.items():
         for item_id, item_pattern_record in user_operation_records.items():
@@ -367,7 +352,7 @@ def takeSamplesByUserBehavior(window_start_date, window_end_date, samples, user_
                         or
                         (behavior[1].date() >= window_start_date and behavior[1].date() < day_before_end_date and 
                         behavior[0] != BEHAVIOR_TYPE_VIEW)):
-                        if (only_from_test_set):
+                        if (during_forecasting):
                             if (item_id in global_test_item_category):
                                 samples.add((user_id, item_id))
                                 added_in_sample = True
@@ -376,69 +361,34 @@ def takeSamplesByUserBehavior(window_start_date, window_end_date, samples, user_
                             samples.add((user_id, item_id))
                             added_in_sample = True
                             break
+    return samples
 
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
-# 根据用户的活跃度进行负采样
+# 根据用户的活跃度进行采样
 # 用户的活跃度为用户在item上的活跃度之和
 # 用户活跃度/Sigma(所有用户活跃度的和) 为每个用户的负样本数 N
 # 按照用户在item上的活跃度降序排序， 取前N个作为用户的负样本
-def takeNagetiveSamplesByUserActivity(window_start_date, window_end_date, positive_samples, total_nagetive_cnt):
-    nagetive_samples = []
+def takeSamplesByUserActivity(window_start_date, window_end_date, nagetive_samples, total_nagetive_cnt):
+    samples = set()
 
-    user_item_pairs = getUserItemPairsByUserBehavior(window_start_date, window_end_date, positive_samples)
-
-    user_activity_score_dict, total_activity = calculateUserActivity(window_start_date, window_end_date, user_item_pairs)
+    user_activity_score_dict = dict()
+    calculateUserActivity(window_start_date, window_end_date, g_user_behavior_patten, user_activity_score_dict, nagetive_samples)
     for user_id, user_act_dict in user_activity_score_dict.items():
-        nagetive_cnt_of_user = round(user_act_dict["activity"] / total_activity * total_nagetive_cnt + 1)
-        # logging.info("user %s's nagetive samples: %d " % (user_id, nagetive_cnt_of_user))
+        if (user_id == "total_activity"):
+            continue
+
+        nagetive_cnt_of_user = round(user_act_dict["activity"] / user_activity_score_dict["total_activity"] * total_nagetive_cnt)
+        # logging.info("user %s has %d nagetive_samples" % (user_id, nagetive_cnt_of_user))
         if (nagetive_cnt_of_user > len(user_act_dict["activity_on_item"])):
             nagetive_cnt_of_user = len(user_act_dict["activity_on_item"])
 
         for i, item_score in enumerate(user_act_dict["activity_on_item"]):
             if (i == nagetive_cnt_of_user):
                 break
-            nagetive_samples.append((user_id, item_score[0]))
+            samples.add((user_id, item_score[0]))
 
-    logging.info("takeNagetiveSamplesByUserActivity nagetive samples %d" % len(nagetive_samples))
+    logging.info("takeNagetiveSamplesByUserActivity nagetive samples %d" % len(samples))
 
-    return nagetive_samples
-
-def calculateUserActivity(window_start_date, window_end_date, user_item_pairs):
-    user_activity_score_dict = dict()
-    total_activity = 0.0
-
-
-    for user_item in user_item_pairs:
-        user_id = user_item[0]
-        item_id = user_item[1]
-
-        if (user_id not in user_activity_score_dict):
-            user_activity_score_dict[user_id] = dict()
-            user_activity_score_dict[user_id]["activity_on_item"] = []
-            user_activity_score_dict[user_id]["activity"] = 0            
-
-        user_activiey_on_item = 0
-        for each_record in g_user_behavior_patten[user_id][item_id]:
-            for behavior in each_record:
-                if (behavior[1].date() >= window_start_date and 
-                    behavior[1].date() < window_end_date):
-                    days = (window_end_date - behavior[1].date()).days
-                    buy_prob = g_prob_bwteen_1st_days_and_buy[days]
-                    # 用户在item上的行为次数 * 行为的权值 * 行为日至购买日之前的天数导致购买的可能性 = 用户在item上的分数， 分数越高，用户对item越感兴趣
-                    user_activiey_on_item += behavior[2] * g_behavior_weight[behavior[0]] * buy_prob
-
-        user_activity_score_dict[user_id]["activity_on_item"].append((item_id, user_activiey_on_item))
-        user_activity_score_dict[user_id]["activity"] += user_activiey_on_item
-        total_activity += user_activiey_on_item
-
-    # 按照用户对item的分数从高到低排序
-    for user_id, item_score in user_activity_score_dict.items():
-        user_activity_score_dict[user_id]["activity_on_item"] = sorted(item_score["activity_on_item"], key=lambda item:item[1], reverse=True)
-        # logging.info("user activity %s %.2f activity %s" % 
-        #              (user_id, 
-        #               user_activity_score_dict[user_id]["activity"], 
-        #               user_activity_score_dict[user_id]["activity_on_item"]))
-
-    return user_activity_score_dict, total_activity
+    return samples

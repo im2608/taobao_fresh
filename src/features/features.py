@@ -24,8 +24,7 @@ def get_behavior_by_date(user_records, behavior_type, checking_date, user_item_p
 
 
 #检查user 是否在 checking_date 这一天对 item 有过 behavior type
-def feature_behavior_on_date(behavior_type, checking_date, user_item_pairs,
-                             cal_feature_importance, cur_total_feature_cnt):    
+def feature_behavior_on_date(behavior_type, checking_date, user_item_pairs):    
     feature_name = "feature_behavior_on_date_%d" % behavior_type
 
     returned_feature_cnt = 1
@@ -46,10 +45,7 @@ def feature_behavior_on_date(behavior_type, checking_date, user_item_pairs,
         if (index % 1000 == 0):            
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    if (cal_feature_importance):
-        g_feature_info[feature_name] = cur_total_feature_cnt
-
-    return does_operated, returned_feature_cnt
+    return does_operated
 
 ######################################################################################################
 ######################################################################################################
@@ -106,12 +102,9 @@ def userBehaviorCntOnItemBeforeCheckingDate(user_records, user_id, item_id, chec
 # 用户在item上 pre_days 天购买/收藏， 
 # 用户在item上 pre_days 天购物车/收藏， 
 # 用户在item上pre_days 天购物车/浏览, 
-# 用户在 item 上各个行为的加权值在用户所有操作过的item 上的排序
-# 用户在 item 上各个行为的加权值在用户对同 category 上操作过的item 上的排序
-# 用户在 category 上行为的加权值在用户对所有操作过的category 上的排序
 
-# 返回 16 个特征
-def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
+# 返回 13 个特征
+def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs):
     logging.info("feature_user_item_behavior_ratio %d, %s" % (pre_days, checking_date))
 
     features_names = [
@@ -149,7 +142,7 @@ def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs, c
         user_total_behavior_cnt = [0, 0, 0, 0]
         if ((user_id, item_id) in user_behavior_cnt_item_dict):
             user_total_behavior_cnt = user_behavior_cnt_item_dict[(user_id, item_id)]
-        else:        
+        else:
             get_behavior_cnt_of_days(g_user_buy_transection, begin_date, checking_date, user_total_behavior_cnt, user_id)
             get_behavior_cnt_of_days(g_user_behavior_patten, begin_date, checking_date, user_total_behavior_cnt, user_id)
             user_behavior_cnt_item_dict[(user_id, item_id)] = user_total_behavior_cnt
@@ -194,7 +187,9 @@ def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs, c
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, user_item_pop_list, features_names)
+    user_item_pop_list = preprocessing.scale(user_item_pop_list)
+
+    return user_item_pop_list
 
 
 ######################################################################################################
@@ -225,7 +220,7 @@ def get_last_opt_item_date(user_records, window_start_date, window_end_date, use
 
 
 # 用户最后一次操作 item 至 checking_date(不包括) 的天数，以及在item上最后一次cart 至最后一次buy之间的天数, 返回5个特征
-def feature_last_opt_item(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
+def feature_last_opt_item(window_start_date, window_end_date, user_item_pairs):
     features_names =["feature_last_opt_item_view", 
                      "feature_last_opt_item_fav", 
                      "feature_last_opt_item_cart", 
@@ -262,7 +257,9 @@ def feature_last_opt_item(window_start_date, window_end_date, user_item_pairs, c
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, days_from_last_opt_cat_list, features_names)
+    days_from_last_opt_cat_list = preprocessing.scale(days_from_last_opt_cat_list)
+
+    return days_from_last_opt_cat_list
 
 ######################################################################################################
 ######################################################################################################
@@ -282,7 +279,7 @@ def get_behavior_cnt_before_date(user_records, before_date, user_id, item_id, be
     return
 
 #用户第一次购买 item 前， 在 item 上的的各个 behavior 的数量, 3个特征
-def feature_behavior_cnt_before_1st_buy(window_start_date, window_end_date, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
+def feature_behavior_cnt_before_1st_buy(window_start_date, window_end_date, user_item_pairs):
     logging.info("feature_behavior_cnt_before_1st_buy(%s, %s)" % (window_start_date, window_end_date))
 
     features_names = ["feature_behavior_cnt_before_1st_buy_view", 
@@ -319,14 +316,16 @@ def feature_behavior_cnt_before_1st_buy(window_start_date, window_end_date, user
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    return getUsefulFeatures(cal_feature_importance, cur_total_feature_cnt, behavior_cnt_before_1st_buy_list, features_names)
+    behavior_cnt_before_1st_buy_list = preprocessing.scale(behavior_cnt_before_1st_buy_list)
+
+    return behavior_cnt_before_1st_buy_list
 
 ######################################################################################################
 ######################################################################################################
 ######################################################################################################
 
 #在 [windw_start_date, window_end_dat) 范围内， user 对 item 购买间隔的平均天数
-def feature_mean_days_between_buy_user_item(window_start_date, window_end_dat, user_item_pairs, cal_feature_importance, cur_total_feature_cnt):
+def feature_mean_days_between_buy_user_item(window_start_date, window_end_dat, user_item_pairs):
     feature_name = "feature_mean_days_between_buy_user_item"
 
     samle_cnt = len(user_item_pairs)
@@ -362,10 +361,9 @@ def feature_mean_days_between_buy_user_item(window_start_date, window_end_dat, u
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
-    if (cal_feature_importance):
-        g_feature_info[feature_name] = cur_total_feature_cnt
+    buy_mean_days_list = preprocessing.scale(buy_mean_days_list)
 
-    return buy_mean_days_list, 1
+    return buy_mean_days_list
 
 ######################################################################################################
 ######################################################################################################

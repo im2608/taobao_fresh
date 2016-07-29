@@ -152,9 +152,8 @@ def loadTestingFeaturesFromRedis():
     return samples_test_list
 
 
-
 #滑动窗口 11-18 -- 12-17 得到并累加特征的重要性， 并保留每个滑动窗口训练时使用的特征矩阵
-def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, cal_feature_importance):
+def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, start_from, user_cnt):
     window_end_date = window_start_date + datetime.timedelta(slide_windows_days)
 
     slide_feature_mat_dict = dict()
@@ -162,7 +161,16 @@ def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_d
 
     #滑动窗口 11-18 -- 12-17 得到特征的重要性， 并保留每个滑动窗口训练是使用的特征矩阵
     while (window_end_date < final_end_date):    
-        Xmat, Ymat, slide_window_clf = GBDT.GBDT_slideWindows(window_start_date, window_end_date, cal_feature_importance, n_estimators)
+        params = {
+            'window_start_date' : window_start_date, 
+            'window_end_date' : window_end_date, 
+            'nag_per_pos' : nag_per_pos, 
+            'n_estimators' : n_estimators, 
+            'max_depth' : max_depth, 
+            'start_from' : start_from, 
+            'user_cnt' : user_cnt 
+        }
+        Xmat, Ymat, slide_window_clf = GBDT.GBDT_slideWindows(**params)
         if (slide_window_clf == None):
             window_end_date += datetime.timedelta(1)
             window_start_date += datetime.timedelta(1)
@@ -231,7 +239,8 @@ min_proba = float(sys.argv[6].split("=")[1])
 # min_proba = 0.5
 
 n_estimators = 300
-
+max_depth = 7
+nag_per_pos = 10
 
 log_file = '..\\log\\log.%d.%d.txt' % (start_from, user_cnt)
 
@@ -260,21 +269,26 @@ else:
     window_start_date = datetime.datetime.strptime("2014-11-18", "%Y-%m-%d").date()
     final_end_date = datetime.datetime.strptime("2014-12-18", "%Y-%m-%d").date()
 
-# 若 cal_feature_importance = True， 则累加特征的重要性， 忽略 final_feature_importance
-# 若为 False，则 final_feature_importance 为累加好的特征重要性， 根据特征的重要性在滑动窗口内重新训练model
-slide_feature_mat_dict, feature_importance = trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_days, True)
+params = {
+    'window_start_date' : window_start_date, 
+    'final_end_date' : final_end_date, 
+    'slide_windows_days' : slide_windows_days, 
+    'start_from' : start_from, 
+    'user_cnt' : user_cnt
+}
+slide_feature_mat_dict, feature_importance = trainModelWithSlideWindow(**params)
 
 logging.info("After split window, feature_importance is : ")
 useful_features_idx = []
-for feature_name, idx in g_feature_info.items():
-    logging.info("%s : %f" % (feature_name, feature_importance[idx]))
+
+for idx, importance in enumerate(feature_importance):
     if (feature_importance[idx] >= g_min_inportance):
         useful_features_idx.append(idx)
-
 logging.info("useful_features_idx %s" % useful_features_idx)
 
 print("=====================================================================")
-print(" training with feature importance slide days (useful features: %d) ==" % len(useful_features_idx))
+print(" training with feature importance  (useful features: %d) =========" % len(useful_features_idx))
+print("======== user from %d, count %d, slide window size %d ========" % (start_from, user_cnt, slide_windows_days))
 print("=====================================================================")
 
 slide_windows_models = []
@@ -287,13 +301,14 @@ for window_start_end_date, X_Y_mat in slide_feature_mat_dict.items():
 
     X_useful_mat = X_mat[:, useful_features_idx]
 
-    params = {'n_estimators': n_estimators, 
-          'max_depth': 4,
-          'min_samples_split': 1,
-          'learning_rate': 0.01, 
-          #'loss': 'ls'
-          'loss': 'deviance'
-          }
+    params = {
+        'n_estimators': n_estimators, 
+        'max_depth': max_depth,
+        'min_samples_split': 1,
+        'learning_rate': 0.01, 
+        #'loss': 'ls'
+        'loss': 'deviance'
+    }
 
     #clf = GradientBoostingRegressor(**params)
     clf = GradientBoostingClassifier(**params)
@@ -301,9 +316,7 @@ for window_start_end_date, X_Y_mat in slide_feature_mat_dict.items():
     print("%s Using useful features for split windows (%s, %s)\r" % (getCurrentTime(), window_start_date, window_end_date), end ="")
     clf.fit(X_useful_mat, Y_mat)
 
-    slide_windows_models.append(clf)
-
-nag_per_pos = 10
+    slide_windows_models.append((X_useful_mat, clf, window_start_end_date))
 
 window_end_date = final_end_date
 window_start_date = window_end_date - datetime.timedelta(slide_windows_days)
@@ -312,12 +325,13 @@ window_start_date = window_end_date - datetime.timedelta(slide_windows_days)
 # 根据滑动窗口的结果，使用重要性 > 0 的特征从 12-08 -- 12-17 生成特征矩阵以及12-18 的购买记录，交给滑动窗口
 # 训练出的model，生成叶节点，传给 LR 再进行训练， 最后使用 LR 从 12-09 -- 12-18 生成特征矩阵进行预测
 print("=====================================================================")
-print("==============  generating weights %s - %s (%d)=======" % (window_start_date, window_end_date, slide_windows_days))
+print("==============  generating weights %s - %s     =======" % (window_start_date, window_end_date))
+print("======== user from %d, count %d, slide window size %d ========" % (start_from, user_cnt, slide_windows_days))
 print("=====================================================================")
 
 
 # samples_weight, Ymat_weight = takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos)
-samples_weight, Ymat_weight = takeSamples(window_start_date, window_end_date, False)
+samples_weight, Ymat_weight = takeSamples(window_start_date, window_end_date, nag_per_pos, False)
 
 # 使用重要性 > 0 的特征从 12-08 -- 12-17 生成特征矩阵
 print("        %s forecasting, reading feature matrix from %s -- %s" % (getCurrentTime(), window_start_date, window_end_date))
@@ -326,11 +340,11 @@ params = {'window_start_date' : window_start_date,
          'window_end_date' : window_end_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_weight, 
-         'cal_feature_importance' : False}
+         }
 
 
 Xmat_weight = GBDT.createTrainingSet(**params)
-Xmat_weight = preprocessing.scale(Xmat_weight)
+# Xmat_weight = preprocessing.scale(Xmat_weight)
 Xmat_weight = Xmat_weight[:, useful_features_idx]
 
 m, n = np.shape(Xmat_weight)
@@ -340,17 +354,20 @@ print("        %s matrix for generating weights (%d, %d)" % (getCurrentTime(), m
 
 # X_train, X_train_lr, Y_train, Y_train_lr = train_test_split(Xmat_weight, Ymat_weight, test_size=0.5)
 
-slide_windows_onehot = []
+
 # 滑动窗口训练出的model分别对12-08 -- 12-17的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
 X_train_features = Xmat_weight
 
 models_cnt = len(slide_windows_models)
-for model_idx, clf_model in enumerate(slide_windows_models):
-    # grd_enc = OneHotEncoder()
-    # grd_enc.fit(clf_model.apply(Xmat_weight)[:, :, 0])
-    # slide_windows_onehot.append(grd_enc)
-    #X_train_lr_enc = grd_enc.transform(clf_model.apply(Xmat_weight)).toarray()
+for X_useful_mat_clf_model in slide_windows_models:
+    X_useful_mat = X_useful_mat_clf_model[0]
+    clf_model = X_useful_mat_clf_model[1]
+    slide_windows_start = X_useful_mat_clf_model[2][0]
+    slide_windows_end = X_useful_mat_clf_model[2][1]
+    #  GBDT 得到叶节点
     X_train_lr_enc = clf_model.apply(Xmat_weight)[:, :, 0]
+    np.savetxt("%s\\..\log\\GBDT.apply.%s.%s.txt" %
+               (runningPath, slide_windows_start, slide_windows_end), X_train_lr_enc, fmt="%.4f", newline="\n")
     X_train_features = np.column_stack((X_train_features, X_train_lr_enc))
 
 m, n = X_train_features.shape
@@ -359,7 +376,7 @@ print("        %s X_train_features by split window models %d, %d " % (getCurrent
 # EnsembleModel
 # GBDT 算法
 params = {'n_estimators': n_estimators, 
-          'max_depth': 4,
+          'max_depth': max_depth,
           'min_samples_split': 1,
           'learning_rate': 0.01, 
           #'loss': 'ls'
@@ -367,10 +384,9 @@ params = {'n_estimators': n_estimators,
           }
 
 
-# gbdtRegressor = GradientBoostingRegressor(**params)
-print("        %s running GBDT..." % (getCurrentTime()))
+# print("        %s running GBDT..." % (getCurrentTime()))
 gbdtRegressor = GradientBoostingClassifier(**params)
-gbdtRegressor.fit(X_train_features, Ymat_weight)
+# gbdtRegressor.fit(X_train_features, Ymat_weight)
 
 
 # 逻辑回归算法
@@ -382,26 +398,27 @@ logisticReg.fit(X_train_features, Ymat_weight)
 # 随机森林算法
 print("        %s running RF..." % (getCurrentTime()))
 rfcls = RandomForestClassifier(n_estimators=n_estimators)
-rfcls.fit(X_train_features, Ymat_weight)
+# rfcls.fit(X_train_features, Ymat_weight)
 
 # 采样 12-09 - 12-18 的数据生成特征矩阵
 forecast_date = window_end_date + datetime.timedelta(1)
 print("=====================================================================")
 print("==============  forecasting %s  ============================" % forecast_date)
+print("======== user from %d, count %d, slide window size %d ========" % (start_from, user_cnt, slide_windows_days))
 print("=====================================================================")
 
 window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
 
 # samples_forecast, _ = takingSamplesForForecasting(window_start_date, forecast_date, True)
-samples_forecast, _ = takeSamples(window_start_date, forecast_date, True)
+samples_forecast, _ = takeSamples(window_start_date, forecast_date, nag_per_pos, True)
 
 params = {'window_start_date' : window_start_date, 
          'window_end_date' : forecast_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_forecast, 
-         'cal_feature_importance' : False}
+         }
 Xmat_forecast = GBDT.createTrainingSet(**params)
-Xmat_forecast = preprocessing.scale(Xmat_forecast)
+# Xmat_forecast = preprocessing.scale(Xmat_forecast)
 Xmat_forecast = Xmat_forecast[:, useful_features_idx]
 
 m, n = np.shape(Xmat_forecast)
@@ -409,42 +426,48 @@ print("        %s matrix for generating forecast matrix (%d, %d)" % (getCurrentT
 
 # 滑动窗口训练出的model分别对12-09 -- 12-18的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
 X_forecast_features = Xmat_forecast
-for model_idx, clf_model in enumerate(slide_windows_models):
-    # X_forecast_enc = slide_windows_onehot[i].transform(clf_model.apply(Xmat_forecast)).toarray()
+for X_useful_mat_clf_model in slide_windows_models:
+    X_useful_mat = X_useful_mat_clf_model[0]
+    clf_model = X_useful_mat_clf_model[1]
+    slide_windows_start = X_useful_mat_clf_model[2][0]
+    slide_windows_end = X_useful_mat_clf_model[2][1]
     X_forecast_enc =clf_model.apply(Xmat_forecast)[:, :, 0]    
     X_forecast_features = np.column_stack((X_forecast_features, X_forecast_enc))
 
 m, n =  X_forecast_features.shape
 print("        %s forecasting feature matrix %d, %d, sample forecasting %d " % (getCurrentTime(), m, n, len(samples_forecast)))
 
-np.savetxt("%s\\..\log\\X_forecast_features.txt" % runningPath, X_forecast_features, fmt="%.4f", newline="\n")
+# np.savetxt("%s\\..\log\\X_forecast_features.txt" % runningPath, X_forecast_features, fmt="%.4f", newline="\n")
 
-#  用 RF 过滤 samples
-findal_predicted_prob = rfcls.predict_proba(X_forecast_features)
-filtered_sampls, X_filtered_features = filterSamplesByProbility(samples_forecast, X_forecast_features, findal_predicted_prob, min_proba)
-m, n = np.shape(X_filtered_features)
-print("%s After filtering by Random Forest, shape(X_filtered_features) = (%d, %d), samples = %d" % 
-     (getCurrentTime(), m, n, len(filtered_sampls)))
-if (len(filtered_sampls) == 0):
-    print("        %s No samples after filtering by Random Forest" % (getCurrentTime()))
-    filtered_sampls = samples_forecast
-    X_filtered_features = X_forecast_features
+# #  用 RF 过滤 samples
+# findal_predicted_prob = rfcls.predict_proba(X_forecast_features)
+# filtered_sampls, X_filtered_features = filterSamplesByProbility(samples_forecast, X_forecast_features, findal_predicted_prob, min_proba)
+# m, n = np.shape(X_filtered_features)
+# print("%s After filtering by Random Forest, shape(X_filtered_features) = (%d, %d), samples = %d" % 
+#      (getCurrentTime(), m, n, len(filtered_sampls)))
+# if (len(filtered_sampls) == 0):
+#     print("        %s No samples after filtering by Random Forest" % getCurrentTime())
+#     filtered_sampls = samples_forecast
+#     X_filtered_features = X_forecast_features
 
-# 用gbdt过滤 samples
-findal_predicted_prob = gbdtRegressor.predict_proba(X_filtered_features)
-filtered_sampls_gbdt, X_filtered_features_gbdt = filterSamplesByProbility(filtered_sampls, X_filtered_features, findal_predicted_prob, min_proba)
-m, n = np.shape(X_filtered_features_gbdt)
-print("%s After filtering by GBDT, shape(X_filtered_features_gbdt) = (%d, %d), samples = %d" % 
-      (getCurrentTime(), m, n, len(filtered_sampls_gbdt)))
-if (len(filtered_sampls_gbdt) == 0):
-    print("        %s No samples after filtering by GBDT")
-    filtered_sampls_gbdt = filtered_sampls
-    X_filtered_features_gbdt = X_filtered_features
+# # 用gbdt过滤 samples
+# findal_predicted_prob = gbdtRegressor.predict_proba(X_filtered_features)
+# filtered_sampls_gbdt, X_filtered_features_gbdt = filterSamplesByProbility(filtered_sampls, X_filtered_features, findal_predicted_prob, min_proba)
+# m, n = np.shape(X_filtered_features_gbdt)
+# print("%s After filtering by GBDT, shape(X_filtered_features_gbdt) = (%d, %d), samples = %d" % 
+#       (getCurrentTime(), m, n, len(filtered_sampls_gbdt)))
+# if (len(filtered_sampls_gbdt) == 0):
+#     print("        %s No samples after filtering by GBDT")
+#     filtered_sampls_gbdt = filtered_sampls
+#     X_filtered_features_gbdt = X_filtered_features
 
-samples_forecast = filtered_sampls_gbdt
+# samples_forecast = filtered_sampls_gbdt
+
+# # 用逻辑回归预测
+# findal_predicted_prob = logisticReg.predict_proba(X_filtered_features_gbdt)
 
 # 用逻辑回归预测
-findal_predicted_prob = logisticReg.predict_proba(X_filtered_features_gbdt)
+findal_predicted_prob = logisticReg.predict_proba(X_forecast_features)
 
 if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()):
 
@@ -495,5 +518,6 @@ else:
               'gbdtRegressor' : gbdtRegressor, 
               'rfcls' : rfcls, 
               'useful_features_idx' : useful_features_idx}
+
 
     verify.verifyPredictionEnsembleModel(**params)

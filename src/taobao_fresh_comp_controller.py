@@ -12,6 +12,7 @@ def waitSubprocesses(runningSubProcesses):
         ret = subprocess.Popen.poll(sub)
         if ret == 0:
             logging.info("subprocess (%s, %s) ended" % (start_from_user_cnt[0], start_from_user_cnt[1]))
+            runningSubProcesses.pop(start_from_user_cnt)
             return start_from_user_cnt
         elif ret is None:
             time.sleep(1) # running
@@ -48,8 +49,8 @@ topK = 5000
 user_for_subprocess = []
 start_from = 0
 while (start_from < total_users):
-    user_for_subprocess.append((start_from, users_one_time))
     if (start_from + users_one_time < total_users):
+        user_for_subprocess.append((start_from, users_one_time))
         start_from += users_one_time
     else:
         user_for_subprocess.append((start_from, total_users - start_from))
@@ -85,7 +86,7 @@ while True:
 forecasted_user_item_prob = dict()
 
 output_file_format = "%s\\..\\output\\subdata\\forecast.GBDT.LR.%d.%d.%d.%s.%d.csv"
-for start_from_user_cnt in user_for_subprocess.items():
+for start_from_user_cnt in user_for_subprocess:
     start_from = start_from_user_cnt[0]
     user_cnt = start_from_user_cnt[1]
     file_idx = 0
