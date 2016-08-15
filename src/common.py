@@ -669,22 +669,46 @@ def getRankFromSortedTuple(sorted_tuple):
     return sorted_rank
 
 
-# 对排序进行onehot 编码，这里假设排序名次最多为 max_rank
-g_rank_onehot_enc = OneHotEncoder()
-max_rank = 150
+# 对onehot 编码，这里假设排序名次最多为 max_rank
+# g_rank_onehot_enc = OneHotEncoder()
+# max_rank = 150
 
-tmp = [x for x in range(max_rank)]
-tmp = np.array(tmp).reshape(-1, 1)
-g_rank_onehot_enc.fit(tmp)
+# tmp = [x for x in range(max_rank)]
+# tmp = np.array(tmp).reshape(-1, 1)
+# g_rank_onehot_enc.fit(tmp)
 
-def oneHotEncodeRank(rank):
-    rank = np.array(rank).reshape(-1, 1)
-    rank_onehot = g_rank_onehot_enc.transform(rank).toarray()
+# def oneHotEncodeRank(rank):
+#     rank = np.array(rank).reshape(-1, 1)
+#     rank_onehot = g_rank_onehot_enc.transform(rank).toarray()
 
-    return rank_onehot
+#     return rank_onehot
 
 
+def getOnehotEncoder(slide_windows_models, Xmat_weight, Xmat_forecast, n_estimators):
+    onehot_val = [0 for x in range(n_estimators)]
+    max_apply = 0
 
+    for X_useful_mat_clf_model in slide_windows_models:
+        X_useful_mat = X_useful_mat_clf_model[0]
+        clf_model = X_useful_mat_clf_model[1]
+        X_train_lr_enc = clf_model.apply(Xmat_weight)[:, :, 0]
+        X_forecast_lr_enc = clf_model.apply(Xmat_forecast)[:, :, 0]
+        for i in range(n_estimators):
+            onehot_val[i] = max(onehot_val[i], X_train_lr_enc[:, i].max(), X_forecast_lr_enc[:, i].max())
+            max_apply = max(max_apply, X_train_lr_enc[:, i].max(), X_forecast_lr_enc[:, i].max())
+
+    onehot_mat = np.zeros((max_apply + 1, n_estimators))
+    for i in range(n_estimators):
+        for j in range(int(onehot_val[i]) + 1):
+            onehot_mat[j, i] = j
+
+    logging.info("max_apply is %d, columns of onehot_mat is %d, sum(onehot_val) %d" % (max_apply, onehot_mat.shape[1], sum(onehot_val)))
+    np.savetxt("%s\\..\log\\onehot_mat.txt" % runningPath, onehot_mat, fmt="%.4f", newline="\n")
+
+    onehot_enc = OneHotEncoder()
+    onehot_enc.fit(onehot_mat)
+
+    return onehot_enc
 
 def calculateUserActivity(window_start_date, window_end_date, user_records, user_activity_score_dict, user_item_pairs):
 
@@ -729,3 +753,20 @@ def calculateUserActivity(window_start_date, window_end_date, user_records, user
         #               user_activity_score_dict[user_id]["activity_on_item"]))
 
     return
+
+
+def modelBlending_iterate(logisticReg, X_train_features, min_proba):
+    iterating_count = 3
+    for iterator in range(iterating_count):
+        Ymat_iter = []
+
+        pretected_prob = logisticReg.predict_proba(X_train_features)
+        for i, prob in enumerate(pretected_prob):
+            if (pretected_prob[i, 1] >= min_proba):
+                Ymat_iter.append(1)
+            else:
+                Ymat_iter.append(0)
+
+        logisticReg.fit(X_train_features, Ymat_iter)
+
+    return logisticReg

@@ -293,16 +293,16 @@ def feature_how_many_users_behavior_item(window_start_date, window_end_date, use
 
         # logging.info("users count behavior on item %s %s" % (item_id, how_many_users_behavior_item[index]))
 
-    rank_onehot = oneHotEncodeRank(how_many_users_behavior_item[:, 4])
+    # rank_onehot = oneHotEncodeRank(how_many_users_behavior_item[:, 4])
 
     # 购买用户数在后边还要用到交叉特征， 这里先不对购买用户数做归一化，在做完交叉特征之后再做
     how_many_users_behavior_item[:, 0] = preprocessing.scale(how_many_users_behavior_item[:, 0])
     how_many_users_behavior_item[:, 1] = preprocessing.scale(how_many_users_behavior_item[:, 1])
     how_many_users_behavior_item[:, 2] = preprocessing.scale(how_many_users_behavior_item[:, 2])
 
-    feature_mat = np.column_stack((how_many_users_behavior_item[:, 0:4], rank_onehot))
+    # feature_mat = np.column_stack((how_many_users_behavior_item[:, 0:4], rank_onehot))
 
-    logging.info("feature_how_many_users_behavior_item returns features count %d" % feature_mat.shape[1])
+    logging.info("feature_how_many_users_behavior_item returns features count %d" % how_many_users_behavior_item.shape[1])
 
     return how_many_users_behavior_item
 

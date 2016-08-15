@@ -99,6 +99,10 @@ for start_from_user_cnt in user_for_subprocess:
 
     file_idx -= 1
     output_file_name = output_file_format % (runningPath, slide_windows_days, start_from, user_cnt, datetime.date.today(), file_idx)
+    if (not os.path.exists(output_file_name)):
+        print("WARNNING: output file does not exist! %s" % output_file_name)
+        continue
+
     print("reading (%d, %d), %s" % (start_from, user_cnt, output_file_name))
     filehandle = open(output_file_name, encoding="utf-8", mode='r')
     csv_reader = csv.reader(filehandle)

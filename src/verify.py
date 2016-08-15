@@ -143,31 +143,11 @@ def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, v
     return
 
 
-def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos, verify_user_start, verify_user_cnt, topK, min_proba,
-                                  slide_windows_models, logisticReg, gbdtRegressor, rfcls, useful_features_idx):
+def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos, verify_samples, Xmat_verify, topK, min_proba,
+                                  slide_windows_models, logisticReg, onehot_enc):
     print("=====================================================================")
     print("============verifyPredictionEnsembleModel %s, %s ===============" % (window_start_date, forecast_date))
     print("=====================================================================")
-
-    g_user_buy_transection.clear()
-
-    print("%s reloading verifying users..." % (getCurrentTime()))
-    loadRecordsFromRedis(verify_user_start, verify_user_cnt)
-
-    # verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date, False)
-    verify_samples, _ = takeSamples(window_start_date, forecast_date, nag_per_pos, False)
-
-    print("%s creating verifying feature matrix..." % (getCurrentTime()))
-
-    params = {'window_start_date' : window_start_date, 
-             'window_end_date' : forecast_date,
-             'nag_per_pos' : nag_per_pos, 
-             'samples' : verify_samples, 
-             # 'cal_feature_importance' : False}
-             }
-
-    Xmat_verify = GBDT.createTrainingSet(**params)
-    Xmat_verify = Xmat_verify[:, useful_features_idx]
 
     X_verify_features = Xmat_verify
     for X_useful_mat_clf_model in slide_windows_models:
@@ -177,34 +157,12 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
         slide_windows_end = X_useful_mat_clf_model[2][1]
 
         X_verify_enc = clf_model.apply(Xmat_verify)[:, :, 0]
+        X_verify_enc = onehot_enc.transform(X_verify_enc).toarray()
         X_verify_features = np.column_stack((X_verify_features, X_verify_enc))
 
     m, n = np.shape(X_verify_features)
 
     print("Verify featurs shape (%d, %d)" % (m, n))
-
-    # findal_predicted_prob = rfcls.predict_proba(X_verify_features)
-    # filtered_sampls, X_filtered_features = filterSamplesByProbility(verify_samples, X_verify_features, findal_predicted_prob, min_proba)
-    # m, n = np.shape(X_filtered_features)
-    # print("%s After filtering by Random Forecast, shape(X_filtered_features) = (%d, %d), samples = %d" % 
-    #      (getCurrentTime(), m, n, len(filtered_sampls)))
-    # if (len(filtered_sampls) == 0):
-    #     print("        %s No samples after filtering by Logistic Regression")
-    #     filtered_sampls = verify_samples
-    #     X_filtered_features = X_verify_features
-
-    # findal_predicted_prob = gbdtRegressor.predict_proba(X_filtered_features)
-    # filtered_sampls_gbdt, X_filtered_features_gbdt = filterSamplesByProbility(filtered_sampls, X_filtered_features, findal_predicted_prob, min_proba)
-    # m, n = np.shape(X_filtered_features_gbdt)
-    # print("%s After filtering by GBDT, shape(X_filtered_features) = (%d, %d), samples = %d" % 
-    #      (getCurrentTime(), m, n, len(filtered_sampls)))
-    # if (len(filtered_sampls_gbdt) == 0):
-    #     print("        %s No samples after filtering by GBDT")
-    #     filtered_sampls_gbdt = filtered_sampls
-    #     X_filtered_features_gbdt = X_filtered_features
-
-    # findal_predicted_prob = logisticReg.predict_proba(X_filtered_features_gbdt)
-    # verify_samples = filtered_sampls_gbdt
 
     findal_predicted_prob = logisticReg.predict_proba(X_verify_features)
 

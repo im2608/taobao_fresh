@@ -48,9 +48,9 @@ def feature_sales_ratio_itme_category(item_sales_vol, category_sales_vol, user_i
 
     logging.info("oneHotEncodeRank feature_category_sals_volume ratio_list[:, 1] %d" % np.max(ratio_list[:, 1]))
 
-    rank_onehot = oneHotEncodeRank(ratio_list[:, 1])
-
-    feature_mat = np.column_stack((ratio_list[:, 0], rank_onehot, preprocessing.scale(item_sales_vol), preprocessing.scale(category_sales_vol)))
+    # rank_onehot = oneHotEncodeRank(ratio_list[:, 1])
+    # feature_mat = np.column_stack((ratio_list[:, 0], rank_onehot, preprocessing.scale(item_sales_vol), preprocessing.scale(category_sales_vol)))
+    feature_mat = np.column_stack((ratio_list, preprocessing.scale(item_sales_vol), preprocessing.scale(category_sales_vol)))
 
     logging.info("leaving feature_category_sals_volume returns feature count %d" % feature_mat.shape[1])
 
@@ -128,9 +128,9 @@ def feature_buyer_ratio_item_category(user_cnt_buy_item, user_cnt_buy_category, 
 
     logging.info("oneHotEncodeRank feature_category_sals_volume ratio_list[:, 1] %d" % np.max(ratio_list[:, 1]))
 
-    rank_onehot = oneHotEncodeRank(ratio_list[:, 1])
-
-    feature_mat = np.column_stack((ratio_list[:, 0], rank_onehot, preprocessing.scale(user_cnt_buy_item), preprocessing.scale(user_cnt_buy_category)))
+    # rank_onehot = oneHotEncodeRank(ratio_list[:, 1])
+    # feature_mat = np.column_stack((ratio_list[:, 0], rank_onehot, preprocessing.scale(user_cnt_buy_item), preprocessing.scale(user_cnt_buy_category)))
+    feature_mat = np.column_stack((ratio_list, preprocessing.scale(user_cnt_buy_item), preprocessing.scale(user_cnt_buy_category)))
 
     # logging.info(" ratio_list is %s" % ratio_list)
 

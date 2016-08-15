@@ -280,12 +280,11 @@ def feature_how_many_users_bought_category(window_start_date, window_end_date, u
         # logging.info("%d users bought category %s" % (user_cnt, item_category))
 
     # 将排序做onehot编码
-    rank_onehot = oneHotEncodeRank(how_many_users_bought_list[:, 1])
+    # rank_onehot = oneHotEncodeRank(how_many_users_bought_list[:, 1])
+    # feature_mat = np.column_stack((how_many_users_bought_list[:, 0], rank_onehot))
 
-    feature_mat = np.column_stack((how_many_users_bought_list[:, 0], rank_onehot))
-
-    logging.info("leaving feature_how_many_users_bought_category, features_cnt %d" % rank_onehot.shape[1])
-    return rank_onehot
+    logging.info("leaving feature_how_many_users_bought_category, features_cnt %d" % how_many_users_bought_list.shape[1])
+    return how_many_users_bought_list
 
 ################################################################################################
 ################################################################################################
@@ -343,10 +342,9 @@ def feature_category_sals_volume(window_start_date, window_end_date, user_item_p
 
     logging.info("oneHotEncodeRank feature_category_sals_volume sals_volume_list[:, 1] %d" % np.max(sals_volume_list[:, 1]))
 
-    rank_onehot = oneHotEncodeRank(sals_volume_list[:, 1])
+    # rank_onehot = oneHotEncodeRank(sals_volume_list[:, 1])
+    # feature_mat = np.column_stack((sals_volume_list[:, 0], rank_onehot))
 
-    feature_mat = np.column_stack((sals_volume_list[:, 0], rank_onehot))
+    logging.info("leaving feature_category_sals_volume, features_cnt %d" % sals_volume_list.shape[1])
 
-    logging.info("leaving feature_category_sals_volume, features_cnt %d" % feature_mat.shape[1])
-
-    return feature_mat
+    return sals_volume_list
