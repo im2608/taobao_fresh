@@ -62,33 +62,28 @@ def verifyBuyRecords():
 
 
 def calcuatingF1(forecast_date, predicted_user_item, actual_user_item):
+    logging.info("calcuatingF1 forecast_date %s" % forecast_date)
+
     actual_count = len(actual_user_item)
     predicted_count = len(predicted_user_item)
 
     hit_count = 0
-    user_hit_list = set()
-    rank_of_hit_count = []
+    user_hit_list = []
 
-    for user_item_index in predicted_user_item:
-        user_item = user_item_index[0]
-        index = user_item_index[1]
-        logging.info("predicted %s, %s, %d" % (user_item[0], user_item[1], index))
+    for index, user_item_prob in enumerate(predicted_user_item):
+        user_item = user_item_prob[0] 
+        prob = user_item_prob[1]
+        # index = user_item_prob[1]
+        logging.info("predicted %s, %d" % (user_item_prob, index))
         if (user_item in actual_user_item):
             hit_count += 1
-            rank_of_hit_count.append(index)
-
-    for user_item in predicted_user_item:
-        for user_item2 in actual_user_item:
-            if (user_item[0] == user_item2[0]):
-                user_hit_list.add(user_item[0])
-
-    print("hit user: %s" % user_hit_list)
+            user_hit_list.append((prob, index, hit_count))
 
     for user_item in actual_user_item:
         logging.info("acutal buy %s, %s" % (user_item[0], user_item[1]))
 
-    print("forecasting date %s, positive count %d, predicted count %d, hit count %d, rank of hit counts %s" %\
-          (forecast_date, actual_count, predicted_count, hit_count, rank_of_hit_count))
+    print("%s forecasting date %s, positive count %d, predicted count %d, hit count %d" %\
+          (getCurrentTime(), forecast_date, actual_count, predicted_count, hit_count))
 
     if (predicted_count != 0):
         p = hit_count / predicted_count
@@ -101,76 +96,17 @@ def calcuatingF1(forecast_date, predicted_user_item, actual_user_item):
         r = 0
 
     if (p != 0 or r != 0):        
-        f1 = 2 * p * r / (p + r)
+        f1 = (2 * p * r) / (p + r)
     else:
         f1 = 0
 
-    print("precission: %.4f, recall %.4f, F1 %.4f" % (p, r, f1))
+    print("%s precission: %.4f, recall %.4f, F1 %.4f" % (getCurrentTime(), p, r, f1))
 
-    return
+    return p, r, f1
 
-
-def verifyPrediction(window_start_date, forecast_date, min_proba, nag_per_pos, verify_user_start, verify_user_cnt, clf, grd_enc, logisticReg):
-    print("=====================================================================")
-    print("=========================  verifying...  ============================")
-    print("=====================================================================")
-
-    g_user_buy_transection.clear()
-
-    print("%s reloading verifying users..." % (getCurrentTime()))
-    loadRecordsFromRedis(verify_user_start, verify_user_cnt)
-
-    item_popularity_dict = calculateItemPopularity(window_start_date, forecast_date)
-
-    verify_samples, _ = takingSamplesForForecasting(window_start_date, forecast_date, False)
-
-    print("%s creating verifying feature matrix..." % (getCurrentTime()))
-    Xmat_verify = GBDT.createTrainingSet(window_start_date, forecast_date, nag_per_pos, verify_samples, False)
-    Xmat_verify = preprocessing.scale(Xmat_verify)
-
-    X_leaves_verify = grd_enc.transform(clf.apply(Xmat_verify))
-
-    predicted_prob = logisticReg.predict_proba(X_leaves_verify)
-
-    predicted_user_item = []
-    for index in range(len(predicted_prob)):
-        if (predicted_prob[index][1] >= min_proba):
-            predicted_user_item.append((verify_samples[index], index))
-
-    actual_user_item = takingPositiveSamples(forecast_date)
-
-    calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
-    return
-
-
-def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos, verify_samples, Xmat_verify, topK, min_proba,
-                                  slide_windows_models, logisticReg, onehot_enc):
-    print("=====================================================================")
-    print("============verifyPredictionEnsembleModel %s, %s ===============" % (window_start_date, forecast_date))
-    print("=====================================================================")
-
-    X_verify_features = Xmat_verify
-    for X_useful_mat_clf_model in slide_windows_models:
-        X_useful_mat = X_useful_mat_clf_model[0]
-        clf_model = X_useful_mat_clf_model[1]
-        slide_windows_start = X_useful_mat_clf_model[2][0]
-        slide_windows_end = X_useful_mat_clf_model[2][1]
-
-        X_verify_enc = clf_model.apply(Xmat_verify)[:, :, 0]
-        X_verify_enc = onehot_enc.transform(X_verify_enc).toarray()
-        X_verify_features = np.column_stack((X_verify_features, X_verify_enc))
-
-    m, n = np.shape(X_verify_features)
-
-    print("Verify featurs shape (%d, %d)" % (m, n))
-
-    findal_predicted_prob = logisticReg.predict_proba(X_verify_features)
-
+def verifyPredictionEnsembleModel(forecast_date, findal_predicted_prob, verify_samples, topK, min_proba):
     # 按照 probability 降序排序
     prob_desc = np.argsort(-findal_predicted_prob[:, 1])
-
-    if (len(verify_samples) < topK):
-        topK = round(len(verify_samples) / 2)
 
     print("%s probility of top1 = %.4f, top%d = %.4f" % 
           (getCurrentTime(), findal_predicted_prob[prob_desc[0], 1], topK, findal_predicted_prob[prob_desc[topK], 1] ))
@@ -183,9 +119,8 @@ def verifyPredictionEnsembleModel(window_start_date, forecast_date, nag_per_pos,
                   (getCurrentTime(), findal_predicted_prob[prob_desc[index], 1], min_proba))
             break
         user_item = verify_samples[prob_desc[index]]
-        predicted_user_item.append((user_item, index))
+        predicted_user_item.append((user_item, findal_predicted_prob[prob_desc[index], 1]))
 
-    actual_user_item = takingPositiveSamplesOnDate(window_start_date, forecast_date)
+    actual_user_item = takingPositiveSamplesOnDate(forecast_date, True)
 
-    calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
-    return 
+    return calcuatingF1(forecast_date, predicted_user_item, actual_user_item)

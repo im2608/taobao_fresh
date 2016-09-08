@@ -107,29 +107,7 @@ def userBehaviorCntOnItemBeforeCheckingDate(user_records, user_id, item_id, chec
 def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs):
     logging.info("feature_user_item_behavior_ratio %d, %s" % (pre_days, checking_date))
 
-    features_names = [
-                      "feature_user_behavior_pre_%d_view" % pre_days,
-                      "feature_user_behavior_pre_%d_fav" % pre_days,
-                      "feature_user_behavior_pre_%d_cart" % pre_days,
-                      "feature_user_behavior_pre_%d_buy" % pre_days,
-
-                      "feature_user_item_behavior_ratio_pre_%d_view" % pre_days,
-                      "feature_user_item_behavior_ratio_pre_%d_fav" % pre_days,
-                      "feature_user_item_behavior_ratio_pre_%d_cart" % pre_days,
-                      "feature_user_item_behavior_ratio_pre_%d_buy" % pre_days,
-
-                      "feature_user_item_behavior_ratio_pre_%d_buy_view" % pre_days,
-                      "feature_user_item_behavior_ratio_pre_%d_buy_fav" % pre_days,
-                      "feature_user_item_behavior_ratio_pre_%d_buy_cart" % pre_days,
-                      "feature_user_item_behavior_ratio_pre_%d_cart_view" % pre_days,
-                      "feature_user_item_behavior_ratio_pre_%d_cart_fav" % pre_days, 
-
-                      # "feature_how_many_behavior_user_item_rank_%d" % pre_days,
-                      # "feature_how_many_behavior_user_item_category_rand_%d" % pre_days,
-                      # "feature_how_many_behavior_user_category_rank_%d" % pre_days,
-                      ]
-
-    user_item_pop_list = np.zeros((len(user_item_pairs), len(features_names)))
+    user_item_pop_list = np.zeros((len(user_item_pairs), 13))
     user_behavior_cnt_item_dict = dict()
 
     total_cnt = len(user_item_pairs)
@@ -196,7 +174,44 @@ def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs):
 ######################################################################################################
 ######################################################################################################
 
-# 用户最后一次操作 item 至 checking_date(不包括）) 的天数，若没有同类型的操作则返回 0
+# 用户第一次，最后一次操作 item 至 checking_date(不包括）) 的天数，若没有同类型的操作则返回 0
+def get_user_item_1st_last_behavior_date(window_start_date, window_end_date, user_id, item_id, user_records):
+    if (user_id not in user_records or \
+        item_id not in user_records[user_id]):
+        return [0 for x in range(8)]
+
+    days_from_1st_behavior = [window_end_date for x in range(4)]
+    days_from_last_behavior = [None for x in range(4)]
+
+    for each_record in user_records[user_id][item_id]:
+        for each_behavior in each_record:
+            behavior_date = each_behavior[1].date()
+            beahvior_idx = each_behavior[0] - 1
+            if (behavior_date < days_from_1st_behavior[beahvior_idx] and 
+                behavior_date >= window_start_date):
+                days_from_1st_behavior[beahvior_idx] = behavior_date
+
+            if (days_from_last_behavior[beahvior_idx] == None):
+                if (behavior_date >= window_start_date and 
+                    behavior_date < window_end_date):
+                    days_from_last_behavior[beahvior_idx] = behavior_date
+            elif (behavior_date > days_from_last_behavior[beahvior_idx] and \
+                  behavior_date < window_end_date):
+                days_from_last_behavior[beahvior_idx] = behavior_date
+
+    for index in range(len(days_from_1st_behavior)):
+        days_from_1st_behavior[index] = (window_end_date - days_from_1st_behavior[index]).days
+
+    for index in range(len(days_from_last_behavior)):
+        if  (days_from_last_behavior[index] != None):
+            days_from_last_behavior[index] = (window_end_date - days_from_last_behavior[index]).days
+        else:
+            days_from_last_behavior[index] = 0
+
+    return days_from_1st_behavior + days_from_last_behavior
+
+
+
 def get_last_opt_item_date(user_records, window_start_date, window_end_date, user_id, item_id):
     days = [0, 0, 0, 0]
 
@@ -219,15 +234,11 @@ def get_last_opt_item_date(user_records, window_start_date, window_end_date, use
     return days
 
 
-# 用户最后一次操作 item 至 checking_date(不包括) 的天数，以及在item上最后一次cart 至最后一次buy之间的天数, 返回5个特征
-def feature_last_opt_item(window_start_date, window_end_date, user_item_pairs):
-    features_names =["feature_last_opt_item_view", 
-                     "feature_last_opt_item_fav", 
-                     "feature_last_opt_item_cart", 
-                     "feature_last_opt_item_buy",
-                     "feature_days_between_last_cart_buy"]
+# 用户第一次，最后一次操作 item 至 checking_date(不包括) 的天数，以及在item上最后一次cart 至最后一次buy之间的天数, 返回13个特征
+def feature_user_item_1stlast_opt(window_start_date, window_end_date, user_item_pairs):
+    logging.info("feature_last_opt_item (%s, %s)" % (window_start_date, window_end_date))
 
-    days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), len(features_names)))
+    days_from_last_opt_cat_list = np.zeros((len(user_item_pairs), 13))
 
     total_cnt = len(user_item_pairs)
     for index in range(len(user_item_pairs)):
@@ -235,25 +246,49 @@ def feature_last_opt_item(window_start_date, window_end_date, user_item_pairs):
         user_id = user_item_pairs[index][0]
         item_id = user_item_pairs[index][1]
 
-        # 得到用户最后一次操作 item 至 checking_date(不包括) 的天数
-        days = get_last_opt_item_date(g_user_buy_transection, window_start_date, window_end_date, user_id, item_id)
-        days2 = get_last_opt_item_date(g_user_behavior_patten, window_start_date, window_end_date, user_id, item_id)
-        for index in range(len(days)):
-            if (days[index] == 0):
-                if (days2 != 0):
-                    days[index] = days2[index]
-            elif (days2[index] != 0):
-                days[index] = min(days[index], days2[index])
+        # 得到用户第一次，最后一次操作 item 至 checking_date(不包括) 的天数，
+        # 共 8 项， 前4 项为第一次行为至end date的天数，后4项为最后一次行为至 end date的天数
+        days_from_1st_last_1 = get_user_item_1st_last_behavior_date(window_start_date, window_end_date, user_id, item_id, g_user_buy_transection)
+        days_from_1st_last_2 = get_user_item_1st_last_behavior_date(window_start_date, window_end_date, user_id, item_id, g_user_behavior_patten)
 
+        # days = get_last_opt_item_date(g_user_buy_transection, window_start_date, window_end_date, user_id, item_id)
+        # days2 = get_last_opt_item_date(g_user_behavior_patten, window_start_date, window_end_date, user_id, item_id)
+        # for index in range(4):
+        #     if (days[index] == 0):
+        #         if (days2 != 0):
+        #             days[index] = days2[index]
+        #     elif (days2[index] != 0):
+        #         days[index] = min(days[index], days2[index])
+
+        for i in range(4):
+            if (days_from_1st_last_1[i] > 0):
+                if (days_from_1st_last_2[i] > 0):
+                    days_from_1st_last_1[i] = max(days_from_1st_last_1[i], days_from_1st_last_2[i])
+            else:
+                days_from_1st_last_1[i] = days_from_1st_last_2[i]
+
+            if (days_from_1st_last_1[i+4] > 0):
+                if (days_from_1st_last_2[i+4] > 0):
+                    days_from_1st_last_1[i+4] = min(days_from_1st_last_1[i+4], days_from_1st_last_2[i+4])
+            else:
+                days_from_1st_last_1[i+4] = days_from_1st_last_2[i+4]
+
+        # 用户在 item上最后一次cart 至最后一次buy之间的天数
         days_between_last_cart_buy = 0
-        if (days[2] > 0):
-            days_between_last_cart_buy = days[3] - days[2]
+        if (days_from_1st_last_1[7] > 0):
+            days_between_last_cart_buy = days_from_1st_last_1[7] - days_from_1st_last_1[6]
 
-        days.append(days_between_last_cart_buy)
+        # 用户第一次，最后一次操作 item 之间的天数
+        days_between_1st_last = [0, 0, 0, 0]
+        for i in range(4):
+            days_between_1st_last[i] = days_from_1st_last_1[i] - days_from_1st_last_1[i+4]
 
-        days_from_last_opt_cat_list[index] =  days
+        days_from_1st_last_1.extend(days_between_1st_last)
+        days_from_1st_last_1.append(days_between_last_cart_buy)
 
-        # logging.info("user %s last opted item %s days %s to %s" % (user_id, item_id, days_from_last_opt_cat_list[index], window_end_date))
+        days_from_last_opt_cat_list[index] =  days_from_1st_last_1
+
+        logging.info("user (%s, %s) itme %s" % (user_id, item_id, days_from_1st_last_1))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 

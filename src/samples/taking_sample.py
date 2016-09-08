@@ -8,38 +8,6 @@ from sklearn.metrics import mean_squared_error
 # 根据 checking_date 进行采样
 # 正样本为用户在 checking_date 这一天购买过的商品，
 # 负样本为用户操作过但是没有购买的商品，或是购买过但不是在 checking_date 这一天购买的商品
-def takingSamplesForTraining(window_start_date, window_end_date, nag_per_pos):
-    # samples = set()
-    samples = []
-    Ymat = []
-    index = 0
-    total_positive = 0
-    totoal_nagetive = 0
-    positive_users = set()
-
-    positive_samples = takingPositiveSamplesOnDate(window_start_date, window_end_date)
-    for user_item in positive_samples:
-        samples.append(user_item)
-        positive_users.add(user_item[0])
-        Ymat.append(1)
-        total_positive += 1
-
-    nagetive_samples = takeNagetiveSamplesByUserActivity(window_start_date, window_end_date, positive_samples, total_positive* nag_per_pos)
-    for user_item in nagetive_samples:
-        samples.append(user_item)
-        Ymat.append(0)
-        totoal_nagetive += 1
-
-    # nagetive_samples = takingNagetiveSamples(window_start_date, window_end_date, positive_samples, nag_per_pos, item_popularity_dict)
-    # for user_item in nagetive_samples:
-    #     samples.append(user_item)
-    #     Ymat.append(0)
-    #     totoal_nagetive += 1
-
-    print("        %s %s - %s, postive samples %d, nagetive samples %d" % 
-         (getCurrentTime(), window_start_date, window_end_date, total_positive, totoal_nagetive))
-
-    return list(samples), Ymat
 
 def takingPositiveSamplesInPeriord(window_start_date, window_end_date):
     print("        %s taking positive samples(%s, %s)" % (getCurrentTime(), window_start_date, window_end_date))
@@ -60,18 +28,26 @@ def takingPositiveSamplesInPeriord(window_start_date, window_end_date):
     print("        %s positive smaple %d" % (getCurrentTime(), len(positive_samples)))
     return positive_samples_in_validate
 
-def takingPositiveSamplesOnDate(window_start_date, buy_date):
+def takingPositiveSamplesOnDate(buy_date, during_verifying):
     print("        %s taking positive samples on (%s)" % (getCurrentTime(), buy_date))
     positive_samples = set()
     buy_cnt = len(g_user_buy_transection)
     index = 0
     for user_id, item_buy_records in g_user_buy_transection.items():
         for item_id, buy_records in item_buy_records.items():
-            for each_record in buy_records:
-                # 当天浏览， 当天购买的记录不作为正样本
-                if (each_record[-1][1].date() == buy_date and each_record[0][1].date() != buy_date):
-                     #and item_id in global_test_item_category):
-                    positive_samples.add((user_id, item_id))
+            for each_record in buy_records:                
+                if (each_record[-1][1].date() == buy_date):
+                    # 若是为了验证而采集正样本， 则当天的购买记录也可作为正样本
+                    if (during_verifying):
+                        positive_samples.add((user_id, item_id))
+                    else:
+                        # 若是为了训练而采集正样本,则当天浏览，当天购买的记录不作为正样本
+                        if (each_record[0][1].date() != buy_date):
+                             #and item_id in global_test_item_category):
+                            positive_samples.add((user_id, item_id))
+                        else:
+                            logging.info("user %s first(%s) operated %s and buy(%s) on same day, skip!" % (user_id,
+                                         each_record[0][1].date(), item_id, each_record[-1][1]))
         index += 1
 
     # positive_samples_in_validate = list(positive_samples)
@@ -80,21 +56,21 @@ def takingPositiveSamplesOnDate(window_start_date, buy_date):
 
 
 
-#user 在 item 上的某条记录是否能作为负样本
-def shouldTakeNagetiveSample(window_start_date, window_end_date, user_id, item_id, from_test_set):
-    # 用户从未购买过任何物品则不能作为负样本
-    # item 不在测试集中不能作为负样本
+#user 在 item 上的某条记录是否能作为样本
+def shouldTakeAsSample(window_start_date, window_end_date, user_id, item_id, during_forecasting, user_records):
+    # 用户从未购买过任何物品则不能作为样本    
     if (user_id not in g_user_buy_transection):
         return False
 
-    if (from_test_set and item_id not in global_test_item_category):
+    # item 不在测试集中不能作为样本
+    if (during_forecasting and item_id not in global_test_item_category):
         return False
 
-    # item 是否被 收藏 or 购物车, 若item只被浏览过则不能作为负样本
-    for each_record in g_user_behavior_patten[user_id][item_id]:
+    # item 是否被 收藏 or 购物车, 若item只被浏览过则不能作为样本
+    for each_record in user_records[user_id][item_id]:
         for behavior_consecutive in each_record:
             if (behavior_consecutive[1].date() < window_end_date and
-                #behavior_consecutive[1].date() >= window_start_date and
+                # behavior_consecutive[1].date() >= window_start_date and
                 behavior_consecutive[0] != BEHAVIOR_TYPE_VIEW):
                 return True
 
@@ -121,79 +97,6 @@ def takeNagetiveSampleByPopularity(popularity_range_list, rand_popularity):
         raise ex
 
     return -1
-
-
-def takingNagetiveSamples(window_start_date, window_end_date, positive_samples, nag_per_pos, item_popularity_dict):
-    nagetive_sample_candidates = dict()
-
-    buy_cnt = len(g_user_buy_transection)
-    index = 0
-
-    for user_id, item_pattern_records in g_user_behavior_patten.items():
-        for item_id in item_pattern_records:
-            if (shouldTakeNagetiveSample(window_start_date, window_end_date, user_id, item_id, False)):
-                nagetive_sample_candidates[(user_id, item_id)] = 1
-
-    popularity_range_dict = dict()
-    total_popularity = 0
-    pop_range_start = 0
-    pop_range_end = 0
-    print("                %s calculating popularities of items in nagetive samples %d " % 
-         (getCurrentTime(), len(nagetive_sample_candidates)))
-    for user_item in nagetive_sample_candidates:
-        #去掉 range 中的小数, 并计算每个 user_item 的 popularity range
-        pop_range_end = round(pop_range_start + item_popularity_dict[user_item[1]] * 100)
-        popularity_range_dict[(pop_range_start, pop_range_end)] = user_item
-        pop_range_start = pop_range_end
-        total_popularity += item_popularity_dict[user_item[1]]
-
-    total_popularity = round(total_popularity *100)
-
-    nagetive_samples = set()
-
-    sorted_pop_ranges = list(popularity_range_dict.keys())
-    sorted_pop_ranges.sort()
-
-    print("                %s total popularity %d" % (getCurrentTime(), total_popularity))
-    print("                %s taking nagetive samples..." % getCurrentTime())
-    nagetive_sample_cnt = len(positive_samples) * nag_per_pos
-    for index in range(nagetive_sample_cnt):
-        # 在 total popularity 范围内取随机值
-        rand_pop = random.randint(0, total_popularity - 1)
-        pop_range_index = takeNagetiveSampleByPopularity(sorted_pop_ranges, rand_pop)
-        pop_range = sorted_pop_ranges[pop_range_index]
-        nagetive_samples.add(popularity_range_dict[pop_range])
-        print("                %d / %d nagetive samples taken\r" % (index, nagetive_sample_cnt), end="")
-
-    return nagetive_samples
-
-
-# from_test_set 表示是否只是从test set 中采样
-def takingSamplesForForecasting(window_start_date, forecasting_date, from_test_set):
-    samples_for_forecasting = dict()
-
-    for user_id, item_buy_records in g_user_buy_transection.items():
-        for item_id, buy_records in item_buy_records.items():
-            if (from_test_set and item_id not in global_test_item_category):
-                continue
-            for each_record in buy_records:
-                if (each_record[-1][1].date() == forecasting_date):
-                    samples_for_forecasting[(user_id, item_id)] = 1
-    print("        %s takingSamplesForForecasting postive samples %d " % (getCurrentTime(), len(samples_for_forecasting)))
-
-    #从测试集中取样与在训练集中采样负样本的逻辑相同
-    for user_id, item_pattern_records in g_user_behavior_patten.items():
-        for item_id in item_pattern_records:
-            if (shouldTakeNagetiveSample(window_start_date, forecasting_date, user_id, item_id, from_test_set)):
-                samples_for_forecasting[(user_id, item_id)] = 0
-
-    print("        %s taking %d sample from testing set" % (getCurrentTime(), len(samples_for_forecasting)))
-    samples = list(samples_for_forecasting.keys())
-    Ymat = []
-    for each_sample in samples:
-        Ymat.append(samples_for_forecasting[each_sample])
-
-    return samples, Ymat
 
 
 
@@ -299,12 +202,40 @@ def calculateItemPopularity(window_start_date, window_end_date):
 ################################################################################################################
 ################################################################################################################
 ################################################################################################################
-
-def takeSamples(window_start_date, window_end_date, nag_per_pos, during_forecasting):
+def loadSavedSamples(window_start_date, window_end_date, start_from, user_cnt):
     Ymat = []
-    samples = set()
+    samples = []
+    
+    samples_file = "%s\\..\log\\sample_(%s,%s)(%d,%d).txt" % (runningPath, window_start_date, window_end_date, start_from, user_cnt)
+    Ymat_file = "%s\\..\log\\Ymat_(%s,%s)(%d,%d).txt" % (runningPath, window_start_date, window_end_date, start_from, user_cnt)
 
-    positive_samples = takingPositiveSamplesOnDate(window_start_date, window_end_date)
+    filehandle = open(samples_file, encoding="utf-8", mode='r')
+
+    for line in filehandle:
+        user_item = line.strip("\n").split(" ")          
+        samples.append((user_item[0], user_item[1]))
+
+    filehandle.close()
+
+    Ymat_file = "%s\\..\log\\11.27 Ymat_%s_%s.txt" % (runningPath, window_start_date, window_end_date)
+
+    filehandle = open(Ymat_file, encoding="utf-8", mode='r')
+    for line in filehandle:
+        Ymat.append(int(line))
+
+    print("        %s loadSavedSamples, total %d / %d" % (getCurrentTime(), len(samples), len(Ymat)))
+
+    return samples, Ymat
+
+def takeSamples(window_start_date, window_end_date, nag_per_pos, during_forecasting, start_from, user_cnt):
+
+    # return loadSavedSamples(window_start_date, window_end_date)
+
+    Ymat = []
+    samples = []
+
+    positive_samples = takingPositiveSamplesOnDate(window_end_date, False)
+    # np.savetxt("%s\\..\log\\positive_sample_%s_%s.txt" % (runningPath, window_start_date, window_end_date), list(positive_samples), fmt="%s", newline="\n")
 
     Ymat.extend([1 for x in range(len(positive_samples))])
 
@@ -313,22 +244,41 @@ def takeSamples(window_start_date, window_end_date, nag_per_pos, during_forecast
               'user_records' : g_user_behavior_patten,
               'during_forecasting' : during_forecasting
     }
-    nagetive_samples = takeSamplesByUserBehavior(**params)
+    nagetive_samples_pattern = takeSamplesByUserBehavior(**params)
+
+    params = {'window_start_date' : window_start_date,
+              'window_end_date' : window_end_date,
+              'user_records' : g_user_buy_transection,
+              'during_forecasting' : during_forecasting
+    }
+    nagetive_samples_buy = takeSamplesByUserBehavior(**params)
+
+    nagetive_samples = nagetive_samples_pattern.union(nagetive_samples_buy)
+    print("        %s take samples by user behavior %d" % (getCurrentTime(), len(nagetive_samples)))
 
     # 从负样本集中去掉 在正样本集中出现的样本
     tmp = nagetive_samples.union(positive_samples) ^ (positive_samples ^ nagetive_samples)
     nagetive_samples = nagetive_samples ^ tmp
+    print("        %s after removing samples that in positive and nagetive %d" % (getCurrentTime(), len(nagetive_samples)))
 
-    # 在负样本集中根据用户的活跃度进行采样
+    # 在训练过程中，在负样本集中根据用户的活跃度进行采样
     if (not during_forecasting):
         nagetive_samples = takeSamplesByUserActivity(window_start_date, window_end_date, nagetive_samples, nag_per_pos * len(positive_samples))
+        print("        %s taking samples by user activity %d / %d" % (getCurrentTime(), len(nagetive_samples), nag_per_pos * len(positive_samples)))
 
     Ymat.extend([0 for x in range(len(nagetive_samples))])
 
-    samples = list(positive_samples.union(nagetive_samples))
+    # samples = list(positive_samples.union(nagetive_samples))
+    samples.extend(list(positive_samples))
+    samples.extend(list(nagetive_samples))
 
-    print("        %s takeSamples, %d / %d, total %d / %d" % 
-          (getCurrentTime(), len(positive_samples), len(nagetive_samples), len(samples), len(Ymat)))
+    print("        %s takeSamples (%s, %s), %d / %d, total %d / %d" % (getCurrentTime(), window_start_date, window_end_date, 
+          len(positive_samples), len(nagetive_samples), len(samples), len(Ymat)))
+
+    # samples_file = "%s\\..\log\\sample_(%s,%s)(%d,%d).txt" % (runningPath, window_start_date, window_end_date, start_from, user_cnt)
+    # Ymat_file = "%s\\..\log\\Ymat_(%s,%s)(%d,%d).txt" % (runningPath, window_start_date, window_end_date, start_from, user_cnt)
+    # np.savetxt(samples_file, samples, fmt="%s", newline="\n")
+    # np.savetxt(Ymat_file, Ymat, fmt="%d", newline="\n")
 
     return samples, Ymat
 
@@ -337,12 +287,16 @@ def takeSamples(window_start_date, window_end_date, nag_per_pos, during_forecast
 # 选择样本规则：
 # 1. user 在 end date 前一天有过操作的item
 # 2. user 在 [begin date, end date 前两天] 有过非浏览操作的item
-# 3. only_from_test_set 表示是否只是从测试集中选择样本
+# 3. during_forecasting 表示是否只是从测试集中选择样本
 def takeSamplesByUserBehavior(window_start_date, window_end_date, user_records, during_forecasting):
     samples = set()
     day_before_end_date = window_end_date - datetime.timedelta(1)
     for user_id, user_operation_records in user_records.items():
         for item_id, item_pattern_record in user_operation_records.items():
+
+            if (not shouldTakeAsSample(window_start_date, window_end_date, user_id, item_id, during_forecasting, user_records)):
+                continue
+
             added_in_sample = False
             for each_record in item_pattern_record:
                 if (added_in_sample):
@@ -351,7 +305,7 @@ def takeSamplesByUserBehavior(window_start_date, window_end_date, user_records, 
                     if (behavior[1].date() == day_before_end_date
                         or
                         (behavior[1].date() >= window_start_date and behavior[1].date() < day_before_end_date and 
-                        behavior[0] != BEHAVIOR_TYPE_VIEW)):
+                         behavior[0] != BEHAVIOR_TYPE_VIEW)):
                         if (during_forecasting):
                             if (item_id in global_test_item_category):
                                 samples.add((user_id, item_id))

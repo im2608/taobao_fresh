@@ -273,14 +273,11 @@ def buy_list_in_week(user_id, each_day, window_end_date):
 
 # [start date, end date) 范围内，用户购买过 1/2/3/4 ... ... /slide window days 次的item有多少， 返回 slide window days 个特征
 # 用户在同一天内多次购买同一个item算一次
-# 例如 用户在 第1天购买了item1，item2， item3， 然后在第5天又购买了该item1, 第6 天购买了 item2， 第7 天购买了item3，第 8 天有购买了item3
+# 例如 用户在 第1天购买了item1，item2， item3， 然后在第5天又购买了该item1, 第6 天购买了 item2， 第7 天购买了item3，第 8 天又购买了item3
 # 用户购买过item1， item2两次，购买过item3 三次，则buy_in_days_list[2] = 2， buy_in_days_list[3] = 1
 def feature_how_many_buy_in_days(window_start_date, window_end_date, user_item_pairs):    
     logging.info("feature_how_many_buy_in_days (%s, %s)" % (window_start_date, window_end_date))
     slide_window_days = (window_end_date - window_start_date).days
-    features_names = []
-    for day in range(1, slide_window_days + 1):
-        features_names.append("feature_how_many_buy_in_days_%d" % day)    
 
     buy_in_days_list = np.zeros((len(user_item_pairs), slide_window_days))
     buy_in_days_dict = dict()

@@ -7,9 +7,6 @@ from sklearn.preprocessing import OneHotEncoder
 ################################################################################################
 ################################################################################################
 ################################################################################################
-
-# 在 [begin_date, checking_date) 期间， 各个 behavior 在 item 上的总次数, 平均每天的点击数以及方差
-# 返回 12 个特征
 def get_everyday_behavior_cnt_of_category(window_start_date, window_end_date, item_records, item_category):
     slide_window_days = (window_end_date - window_start_date).days
 
@@ -33,8 +30,12 @@ def get_everyday_behavior_cnt_of_category(window_start_date, window_end_date, it
 
     return behavior_cnt_every_day
 
-# 前 pre_days 天， category 上 各个behavior 的总次数, 平均每天的点击数以及方差
-
+# 前 pre_days 天， category 上 各个behavior 的总次数, 平均每天的点击数以及方差, 
+# 购物车/浏览
+# 购物车/收藏
+# 购买/浏览
+# 购买/收藏
+# 购买/收藏
 # 返回 17 个特征
 def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs):
     logging.info("feature_beahvior_cnt_on_category(%d, %s)" % (pre_days, window_end_date))
@@ -49,8 +50,7 @@ def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs)
 
     category_behavior_cnt_dict = dict()
     category_behavior_cnt_list = np.zeros((len(user_item_pairs), features_cnt))
-    slide_window_days = (window_end_date - window_start_date).days
-
+    
     total_cnt = len(user_item_pairs)
     for index in range(len(user_item_pairs)):
         item_id = user_item_pairs[index][1]
@@ -61,7 +61,7 @@ def feature_beahvior_cnt_on_category(pre_days, window_end_date, user_item_pairs)
             continue
 
         start_time = time.clock()
-        behavior_cnt_every_day = np.zeros((4, slide_window_days))
+        behavior_cnt_every_day = np.zeros((4, pre_days))
         if (item_id in g_user_buy_transection_item):
             behavior_cnt_every_day = get_everyday_behavior_cnt_of_category(window_start_date, window_end_date, 
                                                                            g_user_buy_transection_item, item_category)

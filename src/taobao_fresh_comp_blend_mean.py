@@ -1,4 +1,4 @@
-#! python taobao_fresh_comp.py start_from= user_cnt= slide= topk= test=1 min_proba=0.5 start=2014-11-12 end=2014-12-10
+#! python taobao_fresh_comp_mean.py start_from= user_cnt= slide= topk= test=1 min_proba=0.5 start=2014-11-12 end=2014-12-10
 from common import *
 # import userCF
 # import itemCF
@@ -14,143 +14,6 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import (GradientBoostingRegressor, RandomForestClassifier, GradientBoostingClassifier)
 from feature_selection import *
 from sklearn.cross_validation import StratifiedKFold  
-
-def splitHistoryData(fileName, splited_files):
-    print(" reading data file ", fileName)
-    dataHistory = {}
-    historyDataFile = open(fileName, encoding="utf-8", mode='r')
-    print("splited_files is  %d" % splited_files)
-
-    splitedFileHandle = []
-    for fileIdx in range(splited_files):
-        splitedFileName = "%s\\..\\input\\splitedInput\\datafile.%03d" % (runningPath, fileIdx)
-        dataFile = open(splitedFileName, "w")
-        splitedFileHandle.append(dataFile)
-        print("%s created" % splitedFileName)
-
-    lineIdx = 0
-
-    for aline in historyDataFile.readlines():
-        if (lineIdx == 0):
-            lineIdx = 1
-            continue
-
-        userId = aline.split(",")[0]
-        fileIdx = hash(userId) % splited_files
-        splitedFileHandle[fileIdx].write(aline)
-
-    print("history data file is read")
-
-    for fileIdx in range(splited_files):
-        splitedFileHandle[fileIdx].close()
-
-    historyDataFile.close()
-
-    return 0
-
-
-#检查所有用户操作过的物品id是否都在 sub item 表中
-def checkItem(train_user_file_name, train_item_file_name):
-    operated_item_cats = dict()
-    sub_item_cats = dict()
-
-    user_behavior = csv.reader(open(train_user_file_name, encoding="utf-8", mode='r'))
-    sub_item_info = csv.reader(open(train_item_file_name, encoding="utf-8", mode='r'))
-    index = 0
-    for aline in user_behavior:
-        if (index == 0):
-            index += 1
-            continue
-
-        operated_item_cats[aline[2]] = 1
-
-    index = 0
-    for aline in sub_item_info:
-        if (index == 0):
-            index += 1
-            continue
-        sub_item_cats[aline[0]] = 1
-
-    missed_cnt = 0
-    for item_cat in sub_item_cats.keys():
-        if (item_cat not in operated_item_cats):
-            missed_cnt += 1
-
-    print("total %d sum item missed in operated item table!" % missed_cnt)
-
-    return 0
-
-def directBuy():
-    directly_buy_users = 0
-    total_users = 0
-    for user_id, item_categories in global_user_item_dict.items():
-        total_users += 1
-        directly_bought_cate = dict()
-        for category, operation_info in item_categories.items():
-            viewing = False
-            buy = False
-            for behavior_idx in range(len(operation_info[BEHAVEIOR_TYPE])):
-                if (operation_info[BEHAVEIOR_TYPE][behavior_idx] == 4):
-                    buy = True                    
-                else:
-                    viewing = True
-
-                if (viewing and buy):
-                    break
-
-            if ((not viewing) and buy):
-                if (operation_info[TIME][behavior_idx] not in directly_bought_cate):
-                    directly_bought_cate[operation_info[TIME][behavior_idx]] = []
-                directly_bought_cate[operation_info[TIME][behavior_idx]].append(category)
-
-        if (len(directly_bought_cate) > 0):
-            directly_buy_users += 1
-            logging.info("user %s directly bought\n%s" % (user_id, directly_bought_cate))
-
-    logging.info("total %d / %d user directly buoght without viewing!" % (directly_buy_users, total_users))
-
-    return 0
-
-def getUserItemCatalogCnt(filename):
-    user_cnt = set()
-    item_catelog_cnt = set()
-
-    filehandle = open(filename, encoding="utf-8", mode='r')
-    user_behavior = csv.reader(filehandle)
-    index = 0
-    for aline in user_behavior:
-        if (index == 0):
-            index += 1
-            continue
-
-        user_cnt.add(aline[0])
-        item_catelog_cnt.add(aline[4])
-
-    print("here are %d users and %d item catelogies in file %s" % (len(user_cnt), len(item_catelog_cnt), filename))
-
-    filehandle.close()
-
-    return 0
-
-    
-
-#"[('41209588', '326492304'), ('25286173', '187742447'), ('129020685', '248639479')]"
-def loadTestingFeaturesFromRedis():    
-    samples_test_str = redis_cli.get("testing_samples").decode()
-
-    #去掉首尾的 [(' and ')]
-    samples_test_str = samples_test_str[3 : len(samples_test_str)-3]
-    # 分割成元组数组
-    samples_test_list = samples_test_str.split("'), ('")
-
-    for index in range(len(samples_test_list)):
-        # 去掉每个元组首尾的( and ):  ('41209588', '326492304')
-        samples_test_list[index] = samples_test_list[index][0 : len(samples_test_list[index]) - 1]
-        user_item = samples_test_list[index].split("', '")
-        samples_test_list[index] = (user_item[0], user_item[1])
-
-    print("load %d tesing samples from redis" % len(samples_test_list))
-    return samples_test_list
 
 
 
@@ -241,11 +104,6 @@ does_output = int(sys.argv[8].split("=")[1])
 print("start_from %d, user_cnt %d, slide window %d, topK %d, min prob %.2f, (%s, %s), output %d " % (start_from,
       user_cnt, slide_windows_days, topK, min_proba, start_date, end_date, does_output))
 
-# start_from = 4000
-# user_cnt = 0
-# slide_windows_days = 4
-# topK = 1000
-# min_proba = 0.5
 
 n_estimators = 100
 max_depth = 7
@@ -281,13 +139,12 @@ params = {
     'slide_windows_days' : slide_windows_days, 
     'start_from' : start_from, 
     'user_cnt' : user_cnt,
-    'nag_per_pos' : nag_per_pos,    
+    'nag_per_pos' : nag_per_pos,
     'n_estimators' : n_estimators, 
     'max_depth' : max_depth, 
     'learning_rate' : learning_rate,
     'min_samples_split' : min_samples_split,
 }
-
 slide_feature_mat_dict, feature_importance = trainModelWithSlideWindow(**params)
 
 logging.info("After slide window, feature_importance is : ")
@@ -333,7 +190,6 @@ for window_start_end_date, X_Y_mat_clf in slide_feature_mat_dict.items():
 window_end_date = final_end_date
 window_start_date = window_end_date - datetime.timedelta(slide_windows_days)
 
-
 # 根据滑动窗口的结果，使用重要性 > 0 的特征从 12-08 -- 12-17 生成特征矩阵以及12-18 的购买记录，交给滑动窗口
 # 训练出的model，生成叶节点，传给 LR 再进行训练， 最后使用 LR 从 12-09 -- 12-18 生成特征矩阵进行预测
 print("=====================================================================")
@@ -348,21 +204,45 @@ params = {'window_start_date' : window_start_date,
          'samples' : samples_weight, 
          }
 
-
 Xmat_weight = createFeatureMatrix(**params)
+if (len(samples_weight) < topK):
+    topK = round(len(samples_weight) / 2)
+
+Xmat_weight, Ymat_weight, samples_weight = shuffle(Xmat_weight, Ymat_weight, samples_weight, random_state=13)
 
 m, n = np.shape(Xmat_weight)
 print("        %s matrix for generating weights matrix (%s, %s) (%d, %d)" % (getCurrentTime(), window_start_date, window_end_date, m, n))
 
-window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
+slide_windows_precession = dict()
 
-if (does_output != 1):  # 如果是需要验证, 则将用于训练的用户清空，读取新的一批用户数据
+# 滑动窗口训练出的model分别使用12-08 -- 12-17的数据对12-18进行预测，得到预测的准确率
+for i, X_useful_mat_clf_model in enumerate(slide_windows_models):
+    X_useful_mat = X_useful_mat_clf_model[0]
+    clf_model = X_useful_mat_clf_model[1]
+    slide_windows_start = X_useful_mat_clf_model[2][0]
+    slide_windows_end = X_useful_mat_clf_model[2][1]
+
+    predicted_prob = clf_model.predict_proba(Xmat_weight)
+
+    params = {'forecast_date': window_end_date, 
+              'findal_predicted_prob' : predicted_prob,
+              'verify_samples' : samples_weight,
+              'topK' : topK, 
+              'min_proba' : min_proba, 
+             }
+    p, r, f1 = verify.verifyPredictionEnsembleModel(**params)
+    print("%s model for slide window (%s, %s), precission is %.4f" % (getCurrentTime(), slide_windows_start, slide_windows_end, p))
+
+    slide_windows_precession[(slide_windows_start, slide_windows_end)] = p
+
+if (does_output == 0):
     verify_user_start = start_from + user_cnt
-    print("%s reloading verifying users..." % (getCurrentTime()))
     verify_users = user_cnt * 2
-    logging.info("reloading verifying users %d ..." % (verify_users))
-    loadRecordsFromRedis(verify_user_start, verify_users)
+    print("%s reloading verifying users... %d" % (getCurrentTime(), verify_users))
+    loadRecordsFromRedis(verify_user_start, verify_users, None)
 
+#取得用于预测的特征矩阵
+window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
 samples_forecast, _ = takeSamples(window_start_date, forecast_date, nag_per_pos, True, start_from, user_cnt)
 
 params = {'window_start_date' : window_start_date, 
@@ -376,60 +256,19 @@ Xmat_forecast = createFeatureMatrix(**params)
 m, n = np.shape(Xmat_forecast)
 print("        %s matrix for generating forecast matrix (%s, %s), (%d, %d)" % (getCurrentTime(), window_start_date, forecast_date, m, n))
 
-onehot_enc = getOnehotEncoder(slide_windows_models, Xmat_weight, Xmat_forecast, n_estimators)
+findal_predicted_prob = np.zeros((Xmat_forecast.shape[0], 2))
 
-# 滑动窗口训练出的model分别对12-08 -- 12-17的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
-X_train_features = Xmat_weight
-
-blend_train = np.zeros((X_train_features.shape[0], len(slide_windows_models)))
-
-for i, X_useful_mat_clf_model in enumerate(slide_windows_models):
-    X_useful_mat = X_useful_mat_clf_model[0]
-    clf_model = X_useful_mat_clf_model[1]
-    slide_windows_start = X_useful_mat_clf_model[2][0]
-    slide_windows_end = X_useful_mat_clf_model[2][1]
-  
-    #  GBDT 得到叶节点
-    X_train_lr_enc = clf_model.apply(Xmat_weight)[:, :, 0]
-    X_train_lr_enc = onehot_enc.transform(X_train_lr_enc).toarray()
-    X_train_features = np.column_stack((X_train_features, X_train_lr_enc))
-
-    # blend_train[:, i] = clf_model.predict_proba(Xmat_weight)[:, 1]
-
-
-m, n = X_train_features.shape
-print("        %s X_train_features by slide window models %d, %d " % (getCurrentTime(), m, n))
-
-# EnsembleModel
-# 逻辑回归算法
-print("        %s running LR..." % (getCurrentTime()))
-logisticReg = LogisticRegression()
-logisticReg.fit(X_train_features, Ymat_weight)
-# logisticReg.fit(blend_train, Ymat_weight)
-
-# logisticReg = modelBlending_iterate(logisticReg, X_train_features, min_proba)
-
-blend_forecast = np.zeros((Xmat_forecast.shape[0], len(slide_windows_models)))
-
-# 滑动窗口训练出的model分别对特征矩阵的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
-X_forecast_features = Xmat_forecast
+# 滑动窗口训练出的model分别对特征矩阵进行预测，预测出的概率 * model的准确率作为该model的输出, 将所有modle的输出累加作为最终的输出，取 topK
 for X_useful_mat_clf_model in slide_windows_models:
     X_useful_mat = X_useful_mat_clf_model[0]
     clf_model = X_useful_mat_clf_model[1]
     slide_windows_start = X_useful_mat_clf_model[2][0]
     slide_windows_end = X_useful_mat_clf_model[2][1]
 
-    X_forecast_enc =clf_model.apply(Xmat_forecast)[:, :, 0]    
-    X_forecast_enc = onehot_enc.transform(X_forecast_enc).toarray()
-    X_forecast_features = np.column_stack((X_forecast_features, X_forecast_enc))
-    # blend_forecast[:, i] = clf_model.predict_proba(Xmat_forecast)[:, 1]
+    predicted_prob = clf_model.predict_proba(Xmat_forecast)
+    findal_predicted_prob += predicted_prob * slide_windows_precession[(slide_windows_start, slide_windows_end)]
 
-m, n =  X_forecast_features.shape
-print("        %s forecasting feature matrix %d, %d, samples for forecasting %d " % (getCurrentTime(), m, n, len(samples_forecast)))
-
-# 用逻辑回归预测
-findal_predicted_prob = logisticReg.predict_proba(X_forecast_features)
-# findal_predicted_prob = logisticReg.predict_proba(blend_forecast)
+findal_predicted_prob[:, 1] = (findal_predicted_prob[:, 1] - findal_predicted_prob[:, 1].min())/(findal_predicted_prob[:, 1].max() - findal_predicted_prob[:, 1].min())
 
 if (does_output == 1):
     print("=====================================================================")
@@ -460,13 +299,18 @@ if (does_output == 1):
     outputFile.close()
 
 else:
-    verify_user_start = start_from + user_cnt
-    verify_user_cnt = user_cnt
-
     print("=====================================================================")
     print("== verifyPredictionEnsembleModel (%s, %s) esitmators %d, max depth %d, learning rate %.2f, min split %d" %
           (window_start_date, forecast_date, n_estimators, max_depth, learning_rate, min_samples_split))
     print("=====================================================================")
+
+    n_folds = 5
+    skf = list(StratifiedKFold(samples_forecast, n_folds))  
+
+    for i, (train, test) in enumerate(skf):  
+        for X_useful_mat_clf_model in slide_windows_models:
+                X_useful_mat = X_useful_mat_clf_model[0]
+                clf_model = X_useful_mat_clf_model[1]
 
     if (len(samples_forecast) < topK):
         topK = round(len(samples_forecast) / 2)
