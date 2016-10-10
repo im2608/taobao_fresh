@@ -1,6 +1,7 @@
 
 import sys
 import redis
+import datetime
 
 runningPath = sys.path[0]
 sys.path.append("%s\\LR-hit\\" % runningPath)
@@ -47,7 +48,16 @@ g_pattern_cnt = 0.0
 g_users_for_alog = []
 
 # 用户第一次接触商品到购买该商品之间的天数与用户购买该用户的可能性。天数越长，可能性越小
-g_prob_bwteen_1st_days_and_buy = {1:0.0571, 2:0.032, 3:0.0221, 4:0.0164, 5:0.0138, 6:0.0098, 7:0.0089, 8:0.0077, 9:0.0062, 10:0.0055}
+g_prob_bwteen_1st_days_and_buy = {1:0.0571, 
+                                  2:0.032, 
+                                  3:0.0221, 
+                                  4:0.0164, 
+                                  5:0.0138, 
+                                  6:0.0098, 
+                                  7:0.0089, 
+                                  8:0.0077, 
+                                  9:0.0062, 
+                                  10:0.0055}
 
 
 g_behavior_weight = {BEHAVIOR_TYPE_VIEW : 1,
@@ -84,3 +94,6 @@ category_cnt = 9557
 
 # 在category中最多有多少item
 max_item_in_category = 786870
+
+
+ONLINE_FORECAST_DATE = datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()

@@ -63,15 +63,12 @@ def feature_sales_ratio_itme_category(item_sales_vol, category_sales_vol, user_i
 ########################################################################################################
 # item  在各个behavior上的次数占 category 上各个behavior次数的比例
 def feature_behavior_cnt_itme_category(item_behavior_cnt, category_behavior_cnt):
-    ratio_list = np.zeros((len(item_behavior_cnt), 1))
+    ratio_list = np.zeros((len(item_behavior_cnt), 4))
    
     for index in range(len(item_behavior_cnt)):
         for behavior in range(4):
             if (category_behavior_cnt[index, behavior] > 0):
-                ratio_list[index] = np.round(item_behavior_cnt[index, behavior] / category_behavior_cnt[index, behavior], 4)
-
-    if (cal_feature_importance):
-        g_feature_info[feature_name] = cur_total_feature_cnt
+                ratio_list[index, behavior] = np.round(item_behavior_cnt[index, behavior] / category_behavior_cnt[index, behavior], 4)
 
     # logging.info(" ratio_list is %s" % ratio_list)
 
@@ -125,8 +122,6 @@ def feature_buyer_ratio_item_category(user_cnt_buy_item, user_cnt_buy_category, 
                 ratio_list[index, 1] = rank
 
     ratio_list[:, 0] = preprocessing.scale(ratio_list[:, 0])
-
-    logging.info("oneHotEncodeRank feature_category_sals_volume ratio_list[:, 1] %d" % np.max(ratio_list[:, 1]))
 
     # rank_onehot = oneHotEncodeRank(ratio_list[:, 1])
     # feature_mat = np.column_stack((ratio_list[:, 0], rank_onehot, preprocessing.scale(user_cnt_buy_item), preprocessing.scale(user_cnt_buy_category)))
@@ -251,8 +246,10 @@ def feature_item_category_weight_rank(window_start_date, window_end_date, user_i
 
     rank_onehot_enc = OneHotEncoder()
 
-    rank_onehot = rank_onehot_enc.fit_transform(item_category_weight_rank)
+    rank_onehot = rank_onehot_enc.fit_transform(item_category_weight_rank).toarray()
 
-    logging.info("feature_item_category_weight_rank returns feature count %d" % rank_onehot.shape[1])
+    logging.info("feature_item_category_weight_rank returns feature count (%d, %d)" % (rank_onehot.shape[0], rank_onehot.shape[1]))
 
-    return rank_onehot
+    return item_category_weight_rank
+
+

@@ -62,7 +62,7 @@ def getUsefulFeatures(during_training, cur_total_feature_cnt, feature_mat, featu
 
 # 根据采样得到的 user-item 对创建特征矩阵
 def createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples):
-    logging.info("entered createFeatureMatrix %s - %s " % (window_start_date, window_end_date))
+    print("        %s createFeatureMatrix (%s, %s) " % (getCurrentTime(), window_start_date, window_end_date))
     slide_start_time = time.clock()
 
     total_feature_cnt = 0
@@ -70,7 +70,6 @@ def createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples
     days_in_window = (window_end_date - window_start_date).days
 
     pre_days_list = [days_in_window, round(days_in_window/2), round(days_in_window/4)]
-
 
     ##################################################################################################
     #######################################商品属性####################################################
@@ -102,6 +101,78 @@ def createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples
     item_sales_vol = feature_mat[:, 0]
     print("        %s feature_item_sals_volume takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
 
+    # [begin date, end date) 期间, 多次购买该item的用户的比例
+    print("        %s item multiple buy ratio...   \r" % (getCurrentTime()), end="")
+    feature_mat = feature_multiple_buy_ratio(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+
+    # 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品的总用户数
+    # 返回 4 个特征
+    feature_mat = feature_item_popularity(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+
+    # [window_start_date, window_end_date) 范围内，item 在24 个小时上的收藏和加购物车数
+    # 返回48 个特征
+    feature_mat = feature_item_fav_cart_in_24H(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+
+    ##################################################################################################
+    #######################################   用户属性   ##############################################
+    ##################################################################################################
+    # 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为, 购买/浏览， 购买/收藏， 购买/购物车, 购物车/收藏， 购物车/浏览的比率,
+    # 浏览/总数， 收藏/总数， 购物车/总数， 购买/总数
+    # 用户购买率：购买的item/操作过的item
+    # 返回 14 个特征
+    print("        %s how many behavior of user...   \r" % (getCurrentTime()), end="")
+    time_start = time.clock()
+    user_buy_ratio = []
+    for i, pre_days in enumerate(pre_days_list):
+        feature_mat = feature_how_many_behavior_user(pre_days, window_end_date, samples)
+        Xmat = np.column_stack((Xmat, feature_mat))
+        user_buy_ratio.append(feature_mat[:, 13])
+    time_end = time.clock()
+
+    # 用户在 checking date（不包括） 之前每次购买间隔的天数的平均值和方差, 返回两个特征
+    print("        %s days between buy of user...   \r" % (getCurrentTime()), end="")
+    time_start = time.clock()
+    feature_mat = feature_mean_days_between_buy_user(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+    time_end = time.clock()
+    print("        %s feature_mean_days_between_buy_user takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
+
+    # [window_start_date, window_end_date) 期间， 用户最后一次行为至 window_end_date （不包括）的天数, 没有该行为则为 0, 返回4个特征
+    print("        %s days from user's last behavior ...   \r" % (getCurrentTime()), end="")
+    time_start = time.clock()
+    feature_mat = feature_last_behavior_user(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+    time_end = time.clock()
+    print("        %s feature_last_behavior_user takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
+
+    #截止到checking_date（不包括）， 用户有多少天进行了各种类型的操作
+    # 返回 4 个特征
+    print("        %s how many days on which user has behavior...   \r" % (getCurrentTime()), end="")
+    time_start = time.clock()
+    feature_mat = feature_how_many_days_for_behavior(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+    time_end = time.clock()
+    print("        %s feature_how_many_days_for_behavior takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
+
+    # [start date, end date) 范围内，用户购买过 1/2/3/4 ... ... /slide window days 次的item有多少， 返回 slide window days 个特征
+    # 用户在同一天内多次购买同一个item算一次
+    # 例如 用户在 第1天购买了item1，item2， item3， 然后在第5天又购买了该item1, 第6 天购买了 item2， 第7 天购买了item3，第 8 天有购买了item3
+    # 用户购买过item1， item2两次，购买过item3 三次，则buy_in_days_list[2] = 2， buy_in_days_list[3] = 1
+    print("        %s feature_how_many_buy_in_days...   \r" % (getCurrentTime()), end="")
+    time_start = time.clock()
+    feature_mat = feature_how_many_buy_in_days(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+    time_end = time.clock()
+    print("        %s feature_how_many_buy_in_days takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
+
+    # [window_start_date, window_end_date) 范围内，用户 在24 个小时上的收藏和加购物车数
+    # 返回48 个特征
+    feature_mat = feature_user_fav_cart_in_24H(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+
     ##################################################################################################
     #######################################用户 - 商品交互属性##########################################
     ##################################################################################################
@@ -130,14 +201,27 @@ def createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples
     # 用户在item上pre_days 天购物车/浏览, 
     # 返回 13 个特征
     user_behavior_cnt_on_item = []
-    for pre_days in pre_days_list:
+    for i, pre_days in enumerate(pre_days_list):
         print("        %s get behavior in last %d days   \r" % (getCurrentTime(), pre_days), end="")
         time_start = time.clock()
-        feature_mat = feature_user_item_behavior_ratio(window_end_date, pre_days, samples)
+        feature_mat = feature_user_item_behavior_ratio(window_end_date, pre_days, user_buy_ratio[i], samples)
         Xmat = np.column_stack((Xmat, feature_mat))
         time_end = time.clock()
         user_behavior_cnt_on_item.append(feature_mat[:, 0:4]) # 保留用户在item上各个behavior的次数
         print("        %s feature_user_item_behavior_ratio(%d) takes %d seconds   \r" % (getCurrentTime(), pre_days, time_end - time_start), end="")
+
+    print("        %s item behavior count...   \r" % (getCurrentTime()), end="")
+    item_behavior_cnt = []
+    time_start = time.clock()
+    for i, pre_days in enumerate(pre_days_list):
+        # 在 [begin_date, checking_date) 期间， item 上各个 behavior 的总次数, 平均每天的点击数,方差, item的 购买数/点击，收藏，购物车 的比率
+        # 以及用户在item上behavior的次数占总次数的比例
+        # 返回 19 个特征
+        feature_mat = feature_beahvior_cnt_on_item(pre_days, window_end_date, user_behavior_cnt_on_item[i], samples)
+        item_behavior_cnt.append(feature_mat[:, 0:4])
+        Xmat = np.column_stack((Xmat, feature_mat))
+    time_end = time.clock()
+    print("        %s feature_beahvior_cnt_on_item takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
 
     #在 [window_start_date, window_end_dat) 范围内， 用户第一次购买 item 前， 在 item 上的的各个 behavior 的数量, 3个特征
     print("        %s behavior count before first buy...   \r" % (getCurrentTime()), end="")
@@ -201,61 +285,16 @@ def createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples
 
     # user 在 category 上各个行为的次数以及在item上各个行为的次数占category上次数的比例
     # 返回 8 个特征
+    user_behavior_cnt_on_category = []
     print("        %s user behavior count on category   \r" % (getCurrentTime()), end="")
     time_start = time.clock()
     for i, pre_days in enumerate(pre_days_list):
         feature_mat = feature_user_behavior_cnt_on_category(pre_days, window_end_date, samples, user_behavior_cnt_on_item[i])
+        user_behavior_cnt_on_category.append(feature_mat[:, 0:4])
         Xmat = np.column_stack((Xmat, feature_mat))
     time_end = time.clock()
     print("        %s user behavior count on category takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
 
-    ##################################################################################################
-    #######################################   用户属性   ##############################################
-    ##################################################################################################
-    # 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为, 购买/浏览， 购买/收藏， 购买/购物车, 购物车/收藏， 购物车/浏览的比率,
-    # 返回 9 个特征
-    print("        %s how many behavior of user...   \r" % (getCurrentTime()), end="")
-    time_start = time.clock()
-    for i, pre_days in enumerate(pre_days_list):
-        feature_mat = feature_how_many_behavior_user(pre_days, window_end_date, samples)
-        Xmat = np.column_stack((Xmat, feature_mat))
-    time_end = time.clock()
-
-    # 用户在 checking date（不包括） 之前每次购买间隔的天数的平均值和方差, 返回两个特征
-    print("        %s days between buy of user...   \r" % (getCurrentTime()), end="")
-    time_start = time.clock()
-    feature_mat = feature_mean_days_between_buy_user(window_start_date, window_end_date, samples)
-    Xmat = np.column_stack((Xmat, feature_mat))
-    time_end = time.clock()
-    print("        %s feature_mean_days_between_buy_user takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
-
-    # [window_start_date, window_end_date) 期间， 用户最后一次行为至 window_end_date （不包括）的天数, 没有该行为则为 0, 返回4个特征
-    print("        %s days from user's last behavior ...   \r" % (getCurrentTime()), end="")
-    time_start = time.clock()
-    feature_mat = feature_last_behavior_user(window_start_date, window_end_date, samples)
-    Xmat = np.column_stack((Xmat, feature_mat))
-    time_end = time.clock()
-    print("        %s feature_last_behavior_user takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
-
-    #截止到checking_date（不包括）， 用户有多少天进行了各种类型的操作
-    # 返回 4 个特征
-    print("        %s how many days on which user has behavior...   \r" % (getCurrentTime()), end="")
-    time_start = time.clock()
-    feature_mat = feature_how_many_days_for_behavior(window_start_date, window_end_date, samples)
-    Xmat = np.column_stack((Xmat, feature_mat))
-    time_end = time.clock()
-    print("        %s feature_how_many_days_for_behavior takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
-
-    # [start date, end date) 范围内，用户购买过 1/2/3/4 ... ... /slide window days 次的item有多少， 返回 slide window days 个特征
-    # 用户在同一天内多次购买同一个item算一次
-    # 例如 用户在 第1天购买了item1，item2， item3， 然后在第5天又购买了该item1, 第6 天购买了 item2， 第7 天购买了item3，第 8 天有购买了item3
-    # 用户购买过item1， item2两次，购买过item3 三次，则buy_in_days_list[2] = 2， buy_in_days_list[3] = 1
-    print("        %s feature_how_many_buy_in_days...   \r" % (getCurrentTime()), end="")
-    time_start = time.clock()
-    feature_mat = feature_how_many_buy_in_days(window_start_date, window_end_date, samples)
-    Xmat = np.column_stack((Xmat, feature_mat))
-    time_end = time.clock()
-    print("        %s feature_how_many_buy_in_days takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
 
     # ##################################################################################################
     # #######################################   category 属性 ###########################################
@@ -276,14 +315,15 @@ def createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples
     # 购买/浏览
     # 购买/收藏
     # 购买/收藏
-    # 返回 17 个特征
+    # 用户在category上各个行为的次数/category 上 各个behavior 的总次数
+    # 返回 21 个特征
     print("        %s feature_beahvior_cnt_on_category...   \r" % (getCurrentTime()), end="")
     category_behavior_cnt = []
     time_start = time.clock()
     for i, pre_days in enumerate(pre_days_list):
-        feature_mat = feature_beahvior_cnt_on_category(pre_days, window_end_date, samples)
+        feature_mat = feature_beahvior_cnt_on_category(pre_days, window_end_date, user_behavior_cnt_on_category[i], samples)
         Xmat = np.column_stack((Xmat, feature_mat))
-        category_behavior_cnt.append(feature_mat[:, 0:4]) # 取出 各个 behavior 在 item 上的总次数
+        category_behavior_cnt.append(feature_mat[:, 0:4]) # 取出 各个 behavior 在 category 上的总次数
     time_end = time.clock()
     print("        %s feature_beahvior_cnt_on_category takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
 
@@ -305,6 +345,9 @@ def createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples
     category_sales_vol = feature_mat[:, 0]
     print("        %s category sales volume takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
 
+    feature_mat = feature_category_fav_cart_in_24H(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
+
     ##################################################################################################
     #######################################  交叉特征  ################################################
     ##################################################################################################
@@ -319,32 +362,31 @@ def createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples
     feature_mat = feature_buyer_ratio_item_category(user_cnt_buy_item, user_cnt_buy_category, samples)
     Xmat = np.column_stack((Xmat, feature_mat))
     print("        %s ratio of user cnt buy item/category   \r" % (getCurrentTime()))
-    
-    print("        %s category behavior count...   \r" % (getCurrentTime()), end="")
-    item_behavior_cnt = []
-    time_start = time.clock()
-    for i, pre_days in enumerate(pre_days_list):
-        # 各个 behavior 在 item 上的总次数, 平均每天的点击数, 方差以及用户在item上behavior的次数占总次数的比例
-        # 返回 16 个特征
-        feature_mat = feature_beahvior_cnt_on_item(pre_days, window_end_date, user_behavior_cnt_on_item[i],
-                                                samples)
-        Xmat = np.column_stack((Xmat, feature_mat))
-    time_end = time.clock()
-    print("        %s feature_beahvior_cnt_on_item takes %d seconds   \r" % (getCurrentTime(), time_end - time_start), end="")
 
+    # 用户在 item 上各个行为的加权值在用户所有操作过的item 上的排序
+    # 用户在 item 上各个行为的加权值在用户对同 category 上操作过的item 上的排序
+    # 用户在 category 上行为的加权值在用户对所有操作过的category 上的排序
     print("        %s item/category weight rank...   \r" % (getCurrentTime()), end="")
-    feature_item_category_weight_rank(window_start_date, window_end_date, samples)
+    feature_mat = feature_item_category_weight_rank(window_start_date, window_end_date, samples)
+    Xmat = np.column_stack((Xmat, feature_mat))
 
     # item 的1st, last behavior 与 category 的1st， last 相差的天数
-    feature_1st_last_between_item_category(days_first_last_item, days_first_last_category)
+    print("        %s feature_1st_last_between_item_category...   \r" % (getCurrentTime()), end="")
+    feature_mat = feature_1st_last_between_item_category(days_first_last_item, days_first_last_category)
+    Xmat = np.column_stack((Xmat, feature_mat))
 
+    # item  在各个behavior上的次数占 category 上各个behavior次数的比例
+    print("        %s feature_behavior_cnt_itme_category...   \r" % (getCurrentTime()), end="")
+    for i, pre_days in enumerate(pre_days_list):
+        feature_mat = feature_behavior_cnt_itme_category(item_behavior_cnt[i], category_behavior_cnt[i])
+        Xmat = np.column_stack((Xmat, feature_mat))
 
     ##################################################################################################
     #######################################    feature end  ##########################################
     ##################################################################################################
     m, n = np.shape(Xmat)
     slide_end_time = time.clock()
-    print("        %s shape of Xmap (%d, %d), slide window(%s, %s) took %d seconds" %
+    print("        %s shape of Xmat (%d, %d), slide window(%s, %s) took %d seconds" %
          (getCurrentTime(), m, n, window_start_date, window_end_date, slide_end_time - slide_start_time))
 
     Xmat = np.mat(Xmat)

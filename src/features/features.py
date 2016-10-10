@@ -66,22 +66,6 @@ def get_behavior_cnt_of_days(user_records, begin_date, end_date, total_behavior_
                     total_behavior_cnt[behavior_consecutive[0] - 1] += behavior_consecutive[2]
     return
 
-def get_behavior_cnt_of_days_caregory(user_records, begin_date, end_date, total_behavior_cnt, category, user_id):
-    if (user_id not in user_records):
-        return
-
-    for item_id, item_opt_records in user_records[user_id].items():
-        category_can = global_train_item_category[item_id]
-        if (category_can != category):
-            continue
-
-        for each_record in item_opt_records:
-            for behavior_consecutive in each_record:
-                if (behavior_consecutive[1].date() >= begin_date and 
-                    behavior_consecutive[1].date() < end_date):
-                    total_behavior_cnt[behavior_consecutive[0] - 1] += behavior_consecutive[2]
-        return
-
 # user id 在 checking date(不包括) 之前 pre_days 天对 item id 进行的behavior type 操作的次数
 def userBehaviorCntOnItemBeforeCheckingDate(user_records, user_id, item_id, checking_date, pre_days, behavior_cnt):
     if (user_id not in user_records or item_id not in user_records[user_id]):
@@ -96,18 +80,18 @@ def userBehaviorCntOnItemBeforeCheckingDate(user_records, user_id, item_id, chec
                 behavior_cnt[behavior_consecutive[0] - 1] += behavior_consecutive[2]
     return
 
-# 用户checking_date（不包括）之前 pre_days 天购买（浏览， 收藏， 购物车）该商品的次数, 这些次数占该用户购买（浏览， 收藏， 购物车）所有商品的总次数的比例,
+# 用户checking_date（不包括）之前 pre_days 天浏览， 收藏， 购物车， 购买该商品的次数, 这些次数占该用户购买（浏览， 收藏， 购物车）所有商品的总次数的比例,
 # 用户在item上pre_days 天购买/浏览，  
 # 用户在item上pre_days 天购买/购物车， 
 # 用户在item上 pre_days 天购买/收藏， 
 # 用户在item上 pre_days 天购物车/收藏， 
-# 用户在item上pre_days 天购物车/浏览, 
-
-# 返回 13 个特征
-def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs):
+# 用户在item上pre_days 天购物车/浏览
+# 用户在item上的(浏览， 收藏， 购物车， 购买）的次数 * 用户的购买率
+# 返回 17 个特征
+def feature_user_item_behavior_ratio(checking_date, pre_days, user_buy_ratio, user_item_pairs):
     logging.info("feature_user_item_behavior_ratio %d, %s" % (pre_days, checking_date))
 
-    user_item_pop_list = np.zeros((len(user_item_pairs), 13))
+    user_item_pop_list = np.zeros((len(user_item_pairs), 17))
     user_behavior_cnt_item_dict = dict()
 
     total_cnt = len(user_item_pairs)
@@ -131,7 +115,7 @@ def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs):
         userBehaviorCntOnItemBeforeCheckingDate(g_user_buy_transection, user_id, item_id, checking_date, pre_days, user_behavior_cnt_on_item)
         userBehaviorCntOnItemBeforeCheckingDate(g_user_behavior_patten, user_id, item_id, checking_date, pre_days, user_behavior_cnt_on_item)
 
-        behavior_cnt_ratio = [0 for x in range(9)]
+        behavior_cnt_ratio = [0 for x in range(13)]
         for behavior in range(len(user_behavior_cnt_on_item)):
             if (user_total_behavior_cnt[behavior] != 0):
                 behavior_cnt_ratio[behavior] = round(user_behavior_cnt_on_item[behavior] / user_total_behavior_cnt[behavior], 4)
@@ -155,6 +139,10 @@ def feature_user_item_behavior_ratio(checking_date, pre_days, user_item_pairs):
         # 用户在item上 pre_days 天购物车/浏览
         if (user_behavior_cnt_on_item[0] > 0):    
             behavior_cnt_ratio[8] = user_behavior_cnt_on_item[2] / user_behavior_cnt_on_item[0]
+
+        # 用户在item上的(浏览， 收藏， 购物车， 购买）的次数 * 用户的购买率
+        for i in range(4):
+            behavior_cnt_ratio[i + 9] = user_behavior_cnt_on_item[i] * user_buy_ratio[index]
 
         user_behavior_cnt_on_item.extend(behavior_cnt_ratio)
  
@@ -288,7 +276,7 @@ def feature_user_item_1stlast_opt(window_start_date, window_end_date, user_item_
 
         days_from_last_opt_cat_list[index] =  days_from_1st_last_1
 
-        logging.info("user (%s, %s) itme %s" % (user_id, item_id, days_from_1st_last_1))
+        # logging.info("user (%s, %s) itme %s" % (user_id, item_id, days_from_1st_last_1))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
@@ -392,7 +380,7 @@ def feature_mean_days_between_buy_user_item(window_start_date, window_end_dat, u
             days += (buy_date[date_index] - buy_date[date_index-1]).days
 
         buy_mean_days_list[index] = round(days / (len(buy_date) - 1))
-        logging.info("user %s, item %s, mean buy days %d" % (user_id, item_id, buy_mean_days_list[index]))
+        # logging.info("user %s, item %s, mean buy days %d" % (user_id, item_id, buy_mean_days_list[index]))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 

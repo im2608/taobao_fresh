@@ -1,4 +1,4 @@
-#! python taobao_fresh_comp.py start_from= user_cnt= slide= topk= test=1 min_proba=0.5 start=2014-11-12 end=2014-12-10
+#! python taobao_fresh_comp.py start_from= user_cnt= slide= topk= min_proba=0.5 start=2014-11-12 end=2014-12-10 output=
 from common import *
 # import userCF
 # import itemCF
@@ -14,6 +14,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import (GradientBoostingRegressor, RandomForestClassifier, GradientBoostingClassifier)
 from feature_selection import *
 from sklearn.cross_validation import StratifiedKFold  
+from sklearn import linear_model
 
 def splitHistoryData(fileName, splited_files):
     print(" reading data file ", fileName)
@@ -247,9 +248,9 @@ print("start_from %d, user_cnt %d, slide window %d, topK %d, min prob %.2f, (%s,
 # topK = 1000
 # min_proba = 0.5
 
-n_estimators = 100
-max_depth = 7
-learning_rate = 0.01
+n_estimators = 50
+max_depth = 4
+learning_rate = 0.5
 min_samples_split = 2
 
 nag_per_pos = 10
@@ -261,6 +262,7 @@ logging.basicConfig(level=logging.INFO,
                     datefmt='%a, %d %b %Y %H:%M:%S',
                     filename=log_file,
                     filemode='w')
+
 
 print("=====================================================================")
 print("  training...  user from %d, count %d, slide window size %d (%s -- %s)" % 
@@ -274,6 +276,8 @@ forecast_date = final_end_date + datetime.timedelta(1)
 loadRecordsFromRedis(start_from, user_cnt)
 
 # countUserCategoryOnSameDay(window_start_date, final_end_date)
+# countUserBuyItemInDay()
+
 
 params = {
     'window_start_date' : window_start_date, 
@@ -312,7 +316,7 @@ for window_start_end_date, X_Y_mat_clf in slide_feature_mat_dict.items():
     Y_mat = X_Y_mat_clf[1]
     clf = X_Y_mat_clf[2]
 
-    X_useful_mat = X_mat#[:, useful_features_idx]
+    X_useful_mat = X_mat[:, useful_features_idx]
 
     params = {
         'n_estimators': n_estimators, 
@@ -340,14 +344,16 @@ print("=====================================================================")
 print("==============  generating weights %s - %s, user from %d, count %d, slide window size %d" % 
       (window_start_date, window_end_date, start_from, user_cnt, slide_windows_days))
 print("=====================================================================")
-samples_weight, Ymat_weight = takeSamples(window_start_date, window_end_date, nag_per_pos, True, start_from, user_cnt)
+samples_weight, Ymat_weight = takeSamples(window_start_date, window_end_date, nag_per_pos, start_from, user_cnt)
+
+np.savetxt("%s\\..\log\\samples_weight(%s,%s).txt" % (runningPath, window_start_date, window_end_date), list(samples_weight), fmt="%s", newline="\n")
+np.savetxt("%s\\..\log\\Ymat_(%s,%s)(%d,%d).txt" % (runningPath, window_start_date, window_end_date, start_from, user_cnt), Ymat_weight, fmt="%d", newline="\n")
 
 params = {'window_start_date' : window_start_date, 
          'window_end_date' : window_end_date,
          'nag_per_pos' : nag_per_pos, 
          'samples' : samples_weight, 
          }
-
 
 Xmat_weight = createFeatureMatrix(**params)
 
@@ -363,7 +369,35 @@ if (does_output != 1):  # 如果是需要验证, 则将用于训练的用户清�
     logging.info("reloading verifying users %d ..." % (verify_users))
     loadRecordsFromRedis(verify_user_start, verify_users)
 
-samples_forecast, _ = takeSamples(window_start_date, forecast_date, nag_per_pos, True, start_from, user_cnt)
+
+print("%s taking samples for forecasting %s " % (getCurrentTime(), forecast_date))
+during_forecasting = False
+if (forecast_date == ONLINE_FORECAST_DATE):
+    during_forecasting = True
+
+params = {'window_start_date' : window_start_date,
+          'window_end_date' : forecast_date,
+          'user_records' : g_user_behavior_patten,
+          'during_forecasting' : during_forecasting
+}
+samples_pattern = takeSamplesByUserBehavior(**params)
+# samples_pattern = set()
+
+if (forecast_date != ONLINE_FORECAST_DATE):
+    params = {'window_start_date' : window_start_date,
+              'window_end_date' : forecast_date,
+              'user_records' : g_user_buy_transection,
+              'during_forecasting' : during_forecasting
+    }
+    samples_buy = takeSamplesByUserBehavior(**params)
+    print("%s samples count from buy %d / %d pattern" % (getCurrentTime(), len(samples_buy), len(samples_pattern)))
+
+    samples_forecast = samples_pattern.union(samples_buy)    
+    samples_forecast = list(samples_forecast)
+else:
+    samples_forecast = list(samples_pattern)    
+
+print("%s samples forecast %d" % (getCurrentTime(), len(samples_forecast)))
 
 params = {'window_start_date' : window_start_date, 
          'window_end_date' : forecast_date,
@@ -381,8 +415,6 @@ onehot_enc = getOnehotEncoder(slide_windows_models, Xmat_weight, Xmat_forecast, 
 # 滑动窗口训练出的model分别对12-08 -- 12-17的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
 X_train_features = Xmat_weight
 
-blend_train = np.zeros((X_train_features.shape[0], len(slide_windows_models)))
-
 for i, X_useful_mat_clf_model in enumerate(slide_windows_models):
     X_useful_mat = X_useful_mat_clf_model[0]
     clf_model = X_useful_mat_clf_model[1]
@@ -391,11 +423,11 @@ for i, X_useful_mat_clf_model in enumerate(slide_windows_models):
   
     #  GBDT 得到叶节点
     X_train_lr_enc = clf_model.apply(Xmat_weight)[:, :, 0]
-    X_train_lr_enc = onehot_enc.transform(X_train_lr_enc).toarray()
-    X_train_features = np.column_stack((X_train_features, X_train_lr_enc))
-
-    # blend_train[:, i] = clf_model.predict_proba(Xmat_weight)[:, 1]
-
+    # X_train_lr_enc = onehot_enc.transform(X_train_lr_enc).toarray()
+    if (X_train_features is None):
+        X_train_features = X_train_lr_enc
+    else:
+        X_train_features = np.column_stack((X_train_features, X_train_lr_enc))
 
 m, n = X_train_features.shape
 print("        %s X_train_features by slide window models %d, %d " % (getCurrentTime(), m, n))
@@ -405,14 +437,15 @@ print("        %s X_train_features by slide window models %d, %d " % (getCurrent
 print("        %s running LR..." % (getCurrentTime()))
 logisticReg = LogisticRegression()
 logisticReg.fit(X_train_features, Ymat_weight)
-# logisticReg.fit(blend_train, Ymat_weight)
+
+# clf = linear_model.Lasso(alpha=0.1)
+# clf.fit(X_train_features, Ymat_weight)
 
 # logisticReg = modelBlending_iterate(logisticReg, X_train_features, min_proba)
 
-blend_forecast = np.zeros((Xmat_forecast.shape[0], len(slide_windows_models)))
-
 # 滑动窗口训练出的model分别对特征矩阵的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
 X_forecast_features = Xmat_forecast
+
 for X_useful_mat_clf_model in slide_windows_models:
     X_useful_mat = X_useful_mat_clf_model[0]
     clf_model = X_useful_mat_clf_model[1]
@@ -420,8 +453,11 @@ for X_useful_mat_clf_model in slide_windows_models:
     slide_windows_end = X_useful_mat_clf_model[2][1]
 
     X_forecast_enc =clf_model.apply(Xmat_forecast)[:, :, 0]    
-    X_forecast_enc = onehot_enc.transform(X_forecast_enc).toarray()
-    X_forecast_features = np.column_stack((X_forecast_features, X_forecast_enc))
+    # X_forecast_enc = onehot_enc.transform(X_forecast_enc).toarray()
+    if (X_forecast_features is None):
+        X_forecast_features = X_forecast_enc
+    else:
+        X_forecast_features = np.column_stack((X_forecast_features, X_forecast_enc))
     # blend_forecast[:, i] = clf_model.predict_proba(Xmat_forecast)[:, 1]
 
 m, n =  X_forecast_features.shape
@@ -429,7 +465,12 @@ print("        %s forecasting feature matrix %d, %d, samples for forecasting %d 
 
 # 用逻辑回归预测
 findal_predicted_prob = logisticReg.predict_proba(X_forecast_features)
-# findal_predicted_prob = logisticReg.predict_proba(blend_forecast)
+
+# findal_predicted_prob = clf.predict(X_forecast_features)
+# Y_prob = np.zeros((X_forecast_features.shape[0], 2))
+# for i in range(len(findal_predicted_prob)):
+#     Y_prob[i, 1] = findal_predicted_prob[i]
+# findal_predicted_prob = Y_prob
 
 if (does_output == 1):
     print("=====================================================================")
@@ -478,4 +519,5 @@ else:
               'min_proba' : min_proba, 
              }
 
+    # verify.verifyPredictionEnsembleModelWithRule(**params)
     verify.verifyPredictionEnsembleModel(**params)

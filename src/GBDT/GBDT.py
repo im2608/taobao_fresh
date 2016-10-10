@@ -20,12 +20,12 @@ def GBDT_slideWindows(window_start_date, window_end_date, nag_per_pos, n_estimat
           (getCurrentTime(), window_start_date, window_end_date, start_from, user_cnt))
 
     print("        %s taking samples for slide window (%s, %d)   \r" % (getCurrentTime(), window_end_date, nag_per_pos))
-    samples, Ymat = takeSamples(window_start_date, window_end_date, nag_per_pos, True, start_from, user_cnt)
-
-    Xmat = createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples)
+    samples, Ymat = takeSamples(window_start_date, window_end_date, nag_per_pos, start_from, user_cnt)
     if (len(samples) == 0):
         print("%s No buy records from %s to %s, returning...   \r" % (getCurrentTime(), window_start_date, window_end_date))
         return None
+
+    Xmat = createFeatureMatrix(window_start_date, window_end_date, nag_per_pos, samples)
 
     m, n = np.shape(Xmat)
 

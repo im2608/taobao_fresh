@@ -27,8 +27,8 @@ def trainModelWithSlideWindow(window_start_date, final_end_date, slide_windows_d
     slide_feature_mat_dict = dict()
     feature_importances = None
 
-    #滑动窗口 11-18 -- 12-17 得到特征的重要性， 并保留每个滑动窗口训练是使用的特征矩阵
-    while (window_end_date < final_end_date):    
+    #滑动窗口 11-18 -- 12-18 得到特征的重要性， 并保留每个滑动窗口训练是使用的特征矩阵
+    while (window_end_date <= final_end_date):    
         params = {
             'window_start_date' : window_start_date, 
             'window_end_date' : window_end_date, 
@@ -180,75 +180,37 @@ for window_start_end_date, X_Y_mat_clf in slide_feature_mat_dict.items():
         'loss': 'deviance'
     }
 
-    # clf = GradientBoostingClassifier(**params)
-
-    # print("%s Using useful features for slide windows (%s, %s)\r" % (getCurrentTime(), window_start_date, window_end_date), end ="")
-    # clf.fit(X_useful_mat, Y_mat)
-
     slide_windows_models.append((X_useful_mat, clf, window_start_end_date))
-
-window_end_date = final_end_date
-window_start_date = window_end_date - datetime.timedelta(slide_windows_days)
-
-# 根据滑动窗口的结果，使用重要性 > 0 的特征从 12-08 -- 12-17 生成特征矩阵以及12-18 的购买记录，交给滑动窗口
-# 训练出的model，生成叶节点，传给 LR 再进行训练， 最后使用 LR 从 12-09 -- 12-18 生成特征矩阵进行预测
-print("=====================================================================")
-print("==============  generating weights %s - %s, user from %d, count %d, slide window size %d" % 
-      (window_start_date, window_end_date, start_from, user_cnt, slide_windows_days))
-print("=====================================================================")
-samples_weight, Ymat_weight = takeSamples(window_start_date, window_end_date, nag_per_pos, start_from, user_cnt)
-
-params = {'window_start_date' : window_start_date, 
-         'window_end_date' : window_end_date,
-         'nag_per_pos' : nag_per_pos, 
-         'samples' : samples_weight, 
-         }
-
-Xmat_weight = createFeatureMatrix(**params)
-if (len(samples_weight) < topK):
-    topK = round(len(samples_weight) / 2)
-
-Xmat_weight, Ymat_weight, samples_weight = shuffle(Xmat_weight, Ymat_weight, samples_weight, random_state=13)
-
-m, n = np.shape(Xmat_weight)
-print("        %s matrix for generating weights matrix (%s, %s) (%d, %d)" % (getCurrentTime(), window_start_date, window_end_date, m, n))
-
-slide_windows_precession = dict()
-
-# 滑动窗口训练出的model分别使用12-08 -- 12-17的数据对12-18进行预测，得到预测的准确率
-for i, X_useful_mat_clf_model in enumerate(slide_windows_models):
-    X_useful_mat = X_useful_mat_clf_model[0]
-    clf_model = X_useful_mat_clf_model[1]
-    slide_windows_start = X_useful_mat_clf_model[2][0]
-    slide_windows_end = X_useful_mat_clf_model[2][1]
-
-    predicted_prob = clf_model.predict_proba(Xmat_weight)
-
-    params = {'forecast_date': window_end_date, 
-              'findal_predicted_prob' : predicted_prob,
-              'verify_samples' : samples_weight,
-              'topK' : topK, 
-              'min_proba' : min_proba, 
-             }
-    p, r, f1 = verify.verifyPredictionEnsembleModel(**params)
-    print("%s model for slide window (%s, %s), precission is %.4f" % (getCurrentTime(), slide_windows_start, slide_windows_end, p))
-
-    slide_windows_precession[(slide_windows_start, slide_windows_end)] = p
 
 if (does_output == 0):
     verify_user_start = start_from + user_cnt
     verify_users = user_cnt * 2
     print("%s reloading verifying users... %d" % (getCurrentTime(), verify_users))
-    loadRecordsFromRedis(verify_user_start, verify_users, None)
+    loadRecordsFromRedis(verify_user_start, verify_users)
 
 #取得用于预测的特征矩阵
 window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
+print("%s taking samples for forecasting %s " % (getCurrentTime(), forecast_date))
+during_forecasting = False
+if (forecast_date == datetime.datetime.strptime("2014-12-19", "%Y-%m-%d").date()):
+    during_forecasting = True
+
 params = {'window_start_date' : window_start_date,
           'window_end_date' : forecast_date,
           'user_records' : g_user_behavior_patten,
-          'during_forecasting' : True
-         }
-samples_forecast = takeSamplesByUserBehavior(**params)
+          'during_forecasting' : during_forecasting
+}
+samples_pattern = takeSamplesByUserBehavior(**params)
+
+params = {'window_start_date' : window_start_date,
+          'window_end_date' : forecast_date,
+          'user_records' : g_user_buy_transection,
+          'during_forecasting' : during_forecasting
+}
+samples_buy = takeSamplesByUserBehavior(**params)
+print("%s samples count from buy %d / %d pattern" % (getCurrentTime(), len(samples_buy), len(samples_pattern)))
+
+samples_forecast = samples_pattern.union(samples_buy)
 samples_forecast = list(samples_forecast)
 
 params = {'window_start_date' : window_start_date, 
@@ -263,17 +225,32 @@ print("        %s matrix for generating forecast matrix (%s, %s), (%d, %d)" % (g
 
 findal_predicted_prob = np.zeros((Xmat_forecast.shape[0], 2))
 
-# 滑动窗口训练出的model分别对特征矩阵进行预测，预测出的概率 * model的准确率作为该model的输出, 将所有modle的输出累加作为最终的输出，取 topK
-for X_useful_mat_clf_model in slide_windows_models:
+print("Voting...")
+ensemble_vote = np.zeros((Xmat_forecast.shape[0], len(slide_windows_models)))
+# 滑动窗口训练出的model分别对特征矩阵进行预测，
+for i, X_useful_mat_clf_model in enumerate(slide_windows_models):
     X_useful_mat = X_useful_mat_clf_model[0]
     clf_model = X_useful_mat_clf_model[1]
     slide_windows_start = X_useful_mat_clf_model[2][0]
     slide_windows_end = X_useful_mat_clf_model[2][1]
 
-    predicted_prob = clf_model.predict_proba(Xmat_forecast)
-    findal_predicted_prob += predicted_prob * slide_windows_precession[(slide_windows_start, slide_windows_end)]
+    predicted_prob = clf_model.predict(Xmat_forecast)
+    ensemble_vote[:, i] = predicted_prob
 
-findal_predicted_prob[:, 1] = (findal_predicted_prob[:, 1] - findal_predicted_prob[:, 1].min())/(findal_predicted_prob[:, 1].max() - findal_predicted_prob[:, 1].min())
+prediction = []
+for vote_i in range(ensemble_vote.shape[0]):
+    ones = 0
+    zeros = 0
+    for model_j in range(ensemble_vote.shape[1]):
+        if (ensemble_vote[vote_i, model_j] == 1):
+            ones += 1
+        elif (ensemble_vote[vote_i, model_j] == 0):
+            zeros += 1
+        else:
+            print("WARNING, unknown class %d" % ensemble_vote[vote_i, model_j])
+
+    if (ones > zeros):
+        prediction.append((samples_forecast[vote_i], vote_i))
 
 if (does_output == 1):
     print("=====================================================================")
@@ -309,22 +286,5 @@ else:
           (window_start_date, forecast_date, n_estimators, max_depth, learning_rate, min_samples_split))
     print("=====================================================================")
 
-    n_folds = 5
-    skf = list(StratifiedKFold(samples_forecast, n_folds))  
-
-    for i, (train, test) in enumerate(skf):  
-        for X_useful_mat_clf_model in slide_windows_models:
-                X_useful_mat = X_useful_mat_clf_model[0]
-                clf_model = X_useful_mat_clf_model[1]
-
-    if (len(samples_forecast) < topK):
-        topK = round(len(samples_forecast) / 2)
-
-    params = {'forecast_date': forecast_date, 
-              'findal_predicted_prob' : findal_predicted_prob,
-              'verify_samples' : samples_forecast,
-              'topK' : topK, 
-              'min_proba' : min_proba, 
-             }
-
-    verify.verifyPredictionEnsembleModel(**params)
+    acutal_buy = takingPositiveSamplesOnDate(forecast_date, True)
+    verify.calcuatingF1(forecast_date, prediction, acutal_buy)

@@ -6,20 +6,50 @@ from feature_selection import *
 ################################################################################################
 ################################################################################################
 ################################################################################################
+
+# 得到在item上有过各个行为的用户列表
+def get_user_opted_item_category(window_start_date, window_end_date, item_records, user_opted_item_category_dict):
+    for item_id, item_opt_records in item_records.items():
+        if (item_id not in user_opted_item_category_dict):
+            user_opted_item_category_dict[item_id] = [set() for x in range(4)]
+
+        item_category = global_train_item_category[item_id]
+        if (item_category not in user_opted_item_category_dict):
+            user_opted_item_category_dict[item_category] = [set() for x in range(4)]
+
+        for user_id, user_opt_records in item_opt_records.items():
+            for each_record in user_opt_records:
+                for each_behavior in each_record:
+                    if (each_behavior[1].date() >= window_start_date and each_behavior[1].date() < window_end_date):
+                        beahvior_type = each_behavior[0]
+                        user_opted_item_category_dict[item_id][beahvior_type - 1].add(user_id)
+                        user_opted_item_category_dict[item_category][beahvior_type - 1].add(user_id)
+
 # 商品热度 浏览，收藏，购物车，购买该商品的用户数/浏览，收藏，购物车，购买同类型商品的总用户数
-def feature_item_popularity(behavior_type, item_popularity_dict, user_item_pairs):
-    feature_name = "feature_item_popularity"
+# 返回 4 个特征
+def feature_item_popularity(window_start_date, window_end_date, user_item_pairs):
 
-    item_popularity_list = np.zeros((len(user_item_pairs), 1))
+    item_popularity_dict = dict()
+    item_popularity_list = np.zeros((len(user_item_pairs), 4))
 
-    total_cnt = len(user_item_pairs)
+    user_opted_item_category_dict = dict()
+    get_user_opted_item_category(window_start_date, window_end_date, g_user_buy_transection_item, user_opted_item_category_dict)
+    get_user_opted_item_category(window_start_date, window_end_date, g_user_behavior_patten_item, user_opted_item_category_dict)
+
+    for item_id_category, user_list in user_opted_item_category_dict.items():
+        user_cnt = [len(user_list[i]) for i in range(len(user_list))]
+        user_opted_item_category_dict[item_id_category] = user_cnt
+
     for index in range(len(user_item_pairs)):
         item_id = user_item_pairs[index][1]
-        item_popularity_list[index] = item_popularity_dict[item_id][behavior_type]
-        if (index % 1000 == 0):
-            print("        %d / %d calculated\r" % (index, total_cnt), end="")
-    
-    item_popularity_list = preprocessing.scale(item_popularity_list)
+        item_category = global_train_item_category[item_id]
+
+        user_cnt_on_item = user_opted_item_category_dict[item_id]
+        user_cnt_on_category = user_opted_item_category_dict[item_category]
+
+        for i in range(len(user_cnt_on_item)):
+            if (user_cnt_on_category[i] > 0):
+                item_popularity_list[index, i] = user_cnt_on_item[i] / user_cnt_on_category[i]
 
     return item_popularity_list
 ################################################################################################
@@ -62,70 +92,147 @@ def get_everyday_behavior_cnt_of_item(window_start_date, window_end_date, item_r
 
     return behavior_cnt_every_day
 
-# 在 [begin_date, checking_date) 期间， 各个 behavior 在 item 上的总次数, 平均每天的点击数,方差以及用户在item上behavior的次数占总次数的比例
-# 返回 16 个特征
+def get_item_buy_ratio(window_start_date, window_end_date, item_id):
+    if (item_id not in g_user_buy_transection_item):
+        return 0
+
+    users_buy_item = set()
+
+    if (item_id in g_user_buy_transection_item):
+        for user_id, item_opt_records in g_user_buy_transection_item[item_id].items():
+            for each_record in item_opt_records:
+                if (each_record[-1][1].date() >= window_start_date and each_record[-1][1].date() < window_end_date):
+                    users_buy_item.add(user_id)
+                    break
+
+    users_opted_item = set()
+    if (item_id in g_user_behavior_patten_item):
+        for user_id, item_opt_records in g_user_behavior_patten_item[item_id].items():
+            for each_record in item_opt_records:
+                if (each_record[0][1].date() >= window_start_date and each_record[-1][1].date() < window_end_date):
+                    users_opted_item.add(user_id)                
+                    break
+
+    users_opted_item = users_opted_item.union(users_buy_item)
+
+    if (len(users_opted_item) == 0):
+        return 0
+
+    return  round(len(users_buy_item) / len(users_opted_item), 4)
+
+# 在 [begin_date, checking_date) 期间， item 上各个 behavior 的总次数, 平均每天的点击数,方差, 
+# item的 购买数/浏览，收藏，购物车 的比率, item 的购物车/浏览，收藏的比率
+# 浏览/总数， 收藏/总数， 购物车/总数， 购买/总数
+# 以及用户在item上behavior的次数占总次数的比例
+# 转化率： 购买item的用户数/访问过item的用户数, 以及item的转化率在category中的排序
+# 返回 27 个特征
 def feature_beahvior_cnt_on_item(pre_days, window_end_date, user_behavior_cnt_on_item, user_item_pairs):
     logging.info("feature_beahvior_cnt_on_item(%d, %s)" % (pre_days, window_end_date))
-    features_names = ["feature_beahvior_cnt_on_item_%d_view" % pre_days, 
-                      "feature_beahvior_cnt_on_item_%d_fav" % pre_days,
-                      "feature_beahvior_cnt_on_item_%d_cart" % pre_days,
-                      "feature_beahvior_cnt_on_item_%d_buy" % pre_days,
 
-                      "feature_beahvior_cnt_on_item_%d_view_mean" % pre_days, 
-                      "feature_beahvior_cnt_on_item_%d_fav_mean" % pre_days,
-                      "feature_beahvior_cnt_on_item_%d_cart_mean" % pre_days,
-                      "feature_beahvior_cnt_on_item_%d_buy_mean" % pre_days,
-
-                      "feature_beahvior_cnt_on_item_%d_view_var" % pre_days, 
-                      "feature_beahvior_cnt_on_item_%d_fav_var" % pre_days,
-                      "feature_beahvior_cnt_on_item_%d_cart_var" % pre_days,
-                      "feature_beahvior_cnt_on_item_%d_buy_var" % pre_days, 
-
-                      "feature_user_beahvior_cnt_on_item_ratio_%d_view" % pre_days,
-                      "feature_user_beahvior_cnt_on_item_ratio_%d_fav" % pre_days,
-                      "feature_user_beahvior_cnt_on_item_ratio_%d_cart" % pre_days,
-                      "feature_user_beahvior_cnt_on_item_ratio_%d_buy" % pre_days,
-                      ]
+    feature_count = 26
 
     window_start_date = window_end_date - datetime.timedelta(pre_days)
 
     item_behavior_cnt_dict = dict()
-    item_behavior_cnt_list = np.zeros((len(user_item_pairs), len(features_names)))
+    item_behavior_cnt_list = np.zeros((len(user_item_pairs), feature_count))
     slide_window_days = (window_end_date - window_start_date).days
+
+    convert_ratio_dict = dict()
 
     total_cnt = len(user_item_pairs)
     for index in range(len(user_item_pairs)):
         user_id = user_item_pairs[index][0]
         item_id = user_item_pairs[index][1]
 
+        #0 -- 3 为行为总数， 4--7 为行为每天的平均数， 8--11 为行为的方差, 12 -- 14 item的购买数/点击，收藏，购物车 的比率
+        # 15-16 item 的购物车/浏览，收藏的比率
+        behavior_cnt_mean_var = [0 for x in range(22)]
+
         if (item_id in item_behavior_cnt_dict):
-            item_behavior_cnt_list[index] = item_behavior_cnt_dict[item_id]
-            continue
+            behavior_cnt_mean_var = item_behavior_cnt_dict[item_id].copy()
+        else:
+            behavior_cnt_every_day = np.zeros((4, slide_window_days))
+            if (item_id in g_user_buy_transection_item):
+                behavior_cnt_every_day = get_everyday_behavior_cnt_of_item(window_start_date, window_end_date, 
+                                                                           g_user_buy_transection_item, item_id)
+            if (item_id in g_user_behavior_patten_item):
+                behavior_cnt_every_day += get_everyday_behavior_cnt_of_item(window_start_date, window_end_date, 
+                                                                            g_user_behavior_patten_item, item_id)
+            for i in range(4):
+                behavior_cnt_mean_var[i] = np.sum(behavior_cnt_every_day[i])
+                behavior_cnt_mean_var[i + 4] = round(np.mean(behavior_cnt_every_day[i]), 2)
+                behavior_cnt_mean_var[i + 8] = round(np.var(behavior_cnt_every_day[i]), 2)
 
-        behavior_cnt_every_day = np.zeros((4, slide_window_days))
-        if (item_id in g_user_buy_transection_item):
-            behavior_cnt_every_day = get_everyday_behavior_cnt_of_item(window_start_date, window_end_date, 
-                                                                       g_user_buy_transection_item, item_id)
-        if (item_id in g_user_behavior_patten_item):
-            behavior_cnt_every_day += get_everyday_behavior_cnt_of_item(window_start_date, window_end_date, 
-                                                                        g_user_behavior_patten_item, item_id)
-        #0 -- 3 为行为总数， 4--7 为行为每天的平均数， 8--11 为行为的方差, 12--15 为用户在item上的行为数占item总行为数的比例
-        behavior_cnt_mean_var_ratio = [0 for x in range(len(features_names))]
+            # 购买数/浏览, 购物车/浏览
+            if (behavior_cnt_mean_var[0] > 0):
+                behavior_cnt_mean_var[12] = behavior_cnt_mean_var[3] / behavior_cnt_mean_var[0]
+                behavior_cnt_mean_var[15] = behavior_cnt_mean_var[2] / behavior_cnt_mean_var[0]
+
+            # 购买数/收藏， 购物车/收藏
+            if (behavior_cnt_mean_var[1] > 0):
+                behavior_cnt_mean_var[13] = behavior_cnt_mean_var[3] / behavior_cnt_mean_var[1]
+                behavior_cnt_mean_var[16] = behavior_cnt_mean_var[2] / behavior_cnt_mean_var[1]
+
+            # 购买数/购物车
+            if (behavior_cnt_mean_var[2] > 0):
+                behavior_cnt_mean_var[14] = behavior_cnt_mean_var[3] / behavior_cnt_mean_var[2]
+
+            total_behavior_cnt = sum(behavior_cnt_mean_var[0:4])
+            if (total_behavior_cnt > 0):
+                for i in range(4):
+                    behavior_cnt_mean_var[i + 17] = behavior_cnt_mean_var[i] / total_behavior_cnt
+
+            # 转化率： 购买item的用户数/访问过item的用户数
+            behavior_cnt_mean_var[21] = get_item_buy_ratio(window_start_date, window_end_date, item_id)
+            item_category = global_train_item_category[item_id]
+
+            # 同类型商品的转化率
+            if (item_category not in convert_ratio_dict):
+                convert_ratio_dict[item_category] = set()
+            convert_ratio_dict[item_category].add((item_id, behavior_cnt_mean_var[21]))
+
+            item_behavior_cnt_dict[item_id] = behavior_cnt_mean_var.copy()
+
+        # 用户在item上的行为数占item总行为数的比例
+        user_behavior_cnt_ratio = [0, 0, 0, 0]
         for i in range(4):
-            behavior_cnt_mean_var_ratio[i] = np.sum(behavior_cnt_every_day[i])
-            behavior_cnt_mean_var_ratio[i + 4] = round(np.mean(behavior_cnt_every_day[i]), 2)
-            behavior_cnt_mean_var_ratio[i + 8] = round(np.var(behavior_cnt_every_day[i]), 2)
-            if (behavior_cnt_mean_var_ratio[i] > 0):
-                behavior_cnt_mean_var_ratio[i + 12] = round(user_behavior_cnt_on_item[index, i] / behavior_cnt_mean_var_ratio[i], 4)
+            if (behavior_cnt_mean_var[i] > 0):
+                user_behavior_cnt_ratio[i] = round(user_behavior_cnt_on_item[index, i] / behavior_cnt_mean_var[i], 4)
+        behavior_cnt_mean_var.extend(user_behavior_cnt_ratio)
 
-        item_behavior_cnt_dict[item_id] = behavior_cnt_mean_var_ratio
-        item_behavior_cnt_list[index] = behavior_cnt_mean_var_ratio
+        item_behavior_cnt_list[index] = behavior_cnt_mean_var
 
-        # logging.info("item %s, user %s, %s, behavior cnt, mean, var %s" % (item_id, user_id, user_behavior_cnt_on_item[index], behavior_cnt_mean_var_ratio))
+        # logging.info("item %s, user %s, %s, behavior cnt, mean, var %s" % (item_id, user_id, user_behavior_cnt_on_item[index], behavior_cnt_mean_var))
         if (index % 1000 == 0):
             print("        %d / %d calculated\r" % (index, total_cnt), end="")
 
     item_behavior_cnt_list = preprocessing.scale(item_behavior_cnt_list)
+
+    # 对category中的item的转化率进行排序
+    for category, convert_ratio_in_caterory in convert_ratio_dict.items():
+        sorted_ratio = sorted(convert_ratio_in_caterory, key=lambda item:item[1], reverse=True)
+        convert_ratio_dict[category] = dict()
+
+        rank = 1
+        cur_ratio = sorted_ratio[0][1]
+        for i, item_ratio in enumerate(sorted_ratio):
+            item_id = item_ratio[0]
+            convert_ratio = item_ratio[1]
+
+            if (convert_ratio < cur_ratio):
+                cur_ratio = convert_ratio
+                rank += 1
+
+            convert_ratio_dict[category][item_id] = rank
+
+    convert_ratio_rank = []
+    for index in range(len(user_item_pairs)):
+        item_id = user_item_pairs[index][1]
+
+        category = global_train_item_category[item_id]
+        convert_ratio_rank.append(convert_ratio_dict[category][item_id])
+
+    item_behavior_cnt_list = np.column_stack((item_behavior_cnt_list, convert_ratio_rank))
 
     logging.info("leaving feature_beahvior_cnt_on_item")
 
@@ -345,3 +452,98 @@ def feature_item_sals_volume(window_start_date, window_end_date, user_item_pairs
     logging.info("leaving feature_item_sals_volume")
 
     return sals_volume_list
+
+################################################################################################
+################################################################################################
+################################################################################################
+def get_multiple_buy_ratio(window_start_date, window_end_date, item_id):    
+    if (item_id not in g_user_buy_transection_item):
+        return 0
+
+    multiply_buy_user = dict()
+    for user_id, item_opt_records in g_user_buy_transection_item[item_id].items():
+        for each_record in item_opt_records:
+            if (each_record[-1][1].date() >= window_start_date and each_record[-1][1].date() < window_end_date):
+                if (user_id not in multiply_buy_user):
+                    multiply_buy_user[user_id] = 1
+                else:
+                    multiply_buy_user[user_id] += 1
+
+    multiply_buy_user_cnt = 0
+    for user_id, buy_cnt in multiply_buy_user.items():
+        if (buy_cnt > 1):
+            multiply_buy_user_cnt += 1
+    
+    if (len(multiply_buy_user) > 0):
+        return multiply_buy_user_cnt / len(multiply_buy_user)
+    else:
+        return 0
+
+# [begin date, end date) 期间, 多次购买该item的用户的比例, 老客户率
+def feature_multiple_buy_ratio(window_start_date, window_end_date, user_item_pairs):
+    logging.info("feature_multiple_buy_ratio (%s, %s)" % (window_start_date, window_end_date))
+
+    multiply_buy_dict = dict()
+
+    multiply_buy_list = np.zeros((len(user_item_pairs), 1))
+
+    for index in range(len(user_item_pairs)):
+        item_id = user_item_pairs[index][1]
+        if (item_id in multiply_buy_dict):
+            multiply_buy_list[index] = multiply_buy_dict[item_id]
+
+        ratio = get_multiple_buy_ratio(window_start_date, window_end_date, item_id)
+
+        multiply_buy_list[index] = ratio
+        multiply_buy_dict[item_id] = ratio
+
+        if (ratio > 0.0):
+            logging.info("multiply buy ratio %.4f" % ratio)
+
+    logging.info("leaving feature_multiple_buy_ratio")
+
+    return multiply_buy_list
+
+
+################################################################################################
+################################################################################################
+################################################################################################
+
+def get_item_fav_cart_cnt(item_fav_cart_dict, featrue_cnt, window_start_date, window_end_date, item_records):
+    for item_id, user_opt_records in item_records.items():
+        if (item_id not in item_fav_cart_dict):
+            # 0- 23 为item在各个小时上 fav 的数量， 24-27 为 cart 的数量
+            item_fav_cart_dict[item_id] = [0 for x in range(featrue_cnt)]
+
+        for user_id, user_opt_item_records in user_opt_records.items():
+            for each_record in user_opt_item_records:
+                for each_behavior in each_record:
+                    if (each_behavior[1].date() >= window_start_date and 
+                        each_behavior[1].date() < window_end_date):
+                        if (each_behavior[0] == BEHAVIOR_TYPE_FAV):
+                            item_fav_cart_dict[item_id][each_behavior[1].hour] += 1
+                        elif (each_behavior[0] == BEHAVIOR_TYPE_CART):
+                            item_fav_cart_dict[item_id][24 + each_behavior[1].hour] += 1
+
+# [window_start_date, window_end_date) 范围内，item 在24 个小时上的收藏和加购物车数
+# 返回48 个特征
+def feature_item_fav_cart_in_24H(window_start_date, window_end_date, user_item_pairs):
+    logging.info("feature_item_fav_cart_in_24H(%s, %s)" % (window_start_date, window_end_date))
+    featrue_cnt = 48
+    item_fav_cart_dict = dict()
+    item_fav_cart_list = np.zeros((len(user_item_pairs), featrue_cnt))
+
+    get_item_fav_cart_cnt(item_fav_cart_dict, featrue_cnt, window_start_date, window_end_date, g_user_buy_transection_item)
+    get_item_fav_cart_cnt(item_fav_cart_dict, featrue_cnt, window_start_date, window_end_date, g_user_behavior_patten_item)
+    
+    for index in range(len(user_item_pairs)):
+        item_id = user_item_pairs[index][1]
+
+        item_fav_cart_list[index] = item_fav_cart_dict[item_id]
+
+        # logging.info("feature_item_fav_cart_in_24H item %s: %s" % (item_id, item_fav_cart_list[index]))
+
+    return item_fav_cart_list
+######################################################################################################
+######################################################################################################
+######################################################################################################

@@ -3,7 +3,8 @@ import apriori
 import GBDT
 from taking_sample import *
 from sklearn import preprocessing
-
+import logging
+from utils import *
 
 buy_records_mysql = dict()
 buy_records_python = dict()
@@ -74,11 +75,12 @@ def calcuatingF1(forecast_date, predicted_user_item, actual_user_item):
         user_item = user_item_prob[0] 
         prob = user_item_prob[1]
         # index = user_item_prob[1]
-        logging.info("predicted %s, %d" % (user_item_prob, index))
+        logging.info("predicted (%s, %s), %d" % (user_item[0], user_item[1], index))
         if (user_item in actual_user_item):
             hit_count += 1
             user_hit_list.append((prob, index, hit_count))
 
+    logging.info("%s acutal buy: " % forecast_date)
     for user_item in actual_user_item:
         logging.info("acutal buy %s, %s" % (user_item[0], user_item[1]))
 
@@ -121,6 +123,33 @@ def verifyPredictionEnsembleModel(forecast_date, findal_predicted_prob, verify_s
         user_item = verify_samples[prob_desc[index]]
         predicted_user_item.append((user_item, findal_predicted_prob[prob_desc[index], 1]))
 
-    actual_user_item = takingPositiveSamplesOnDate(forecast_date, True)
+    actual_user_item = takingPositiveSamplesOnDate(forecast_date, during_verifying=True)
 
     return calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
+
+def verifyPredictionEnsembleModelWithRule(forecast_date, findal_predicted_prob, verify_samples, topK, min_proba):
+    # 按照 probability 降序排序
+    prob_desc = np.argsort(-findal_predicted_prob[:, 1])
+
+    print("%s probility of top1 = %.4f, top%d = %.4f" % 
+          (getCurrentTime(), findal_predicted_prob[prob_desc[0], 1], topK, findal_predicted_prob[prob_desc[topK], 1] ))
+
+    predicted_user_item = []
+
+    for index in range(topK):
+        if (findal_predicted_prob[prob_desc[index], 1] < min_proba):
+            print("        %s probability %.4f < min_proba %.4f, breaking..." %
+                  (getCurrentTime(), findal_predicted_prob[prob_desc[index], 1], min_proba))
+            break
+        user_item = verify_samples[prob_desc[index]]
+        predicted_user_item.append((user_item, findal_predicted_prob[prob_desc[index], 1]))
+
+    prediction_rule = rule_12_18_cart(forecast_date)
+
+    predicted_user_item = list((set(predicted_user_item).union(set(prediction_rule))))
+
+    actual_user_item = takingPositiveSamplesOnDate(forecast_date, during_verifying=True)
+
+    return calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
+
+# r = f*p/(2*p-f)

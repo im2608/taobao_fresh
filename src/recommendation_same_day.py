@@ -51,3 +51,27 @@ def countUserCategoryOnSameDay(start_date, end_date):
     print("total buy on same day %s, operated before %d, does not operated before %d" % (total_buy_same_day, operated_before, doesnot_operated_before))
 
     exit(0)
+
+def countUserBuyItemInDay():
+    user_buy_item_in_day = dict()
+
+    for user_id, item_buy_records in g_user_buy_transection.items():
+        for item_id, buy_records in item_buy_records.items():
+            for each_record in buy_records:
+                # 当天第一次操作item，当天购买
+                if (each_record[0][1].date() == each_record[-1][1].date()):
+                    u = "u:" + user_id
+                    if (u not in user_buy_item_in_day):
+                        user_buy_item_in_day[u] = set()
+                    user_buy_item_in_day[u].add(item_id)
+
+                    i = "i:" + item_id
+                    if (i not in user_buy_item_in_day):
+                        user_buy_item_in_day[i] = set()
+                    user_buy_item_in_day[i].add(user_id)
+
+    for u_i in user_buy_item_in_day:
+        if (u_i[0:2] == "i:"):
+            logging.info("%s ==> %s" % (u_i, user_buy_item_in_day[u_i]))
+
+    exit(0)

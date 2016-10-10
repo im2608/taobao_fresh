@@ -932,3 +932,16 @@ def modelBlending_iterate(logisticReg, X_train_features, min_proba):
     return logisticReg
 
 
+def sigmoid(inX):
+    return 1.0/(1.0 + np.exp(-inX))
+
+def ridgeRegress(Xmat, Ymat, lam):
+    print("ridgeRegress Xmat (%d, %d), Ymat (%d)" %(Xmat.shape[0], Xmat.shape[1], len(Ymat)))
+    xTx = Xmat.T * Xmat
+    demon = xTx + np.eye(np.shape(Xmat)[1]) * lam
+    if (np.linalg.det(demon) == 0.0):
+        print("Xmat is singular, can not do inverse")
+        return None
+    tmp = Xmat.T * np.mat(Ymat).T
+    ws = demon.I * tmp
+    return ws

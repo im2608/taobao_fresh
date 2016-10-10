@@ -9,12 +9,14 @@ from feature_selection import *
 ####################################################################################################
 
 # 距离 end_date pre_days 天内， 用户总共有过多少次浏览，收藏，购物车，购买的行为, 购买/浏览， 购买/收藏， 购买/购物车, 购物车/收藏， 购物车/浏览的比率,
-# 返回 9 个特征
+# 浏览/总数， 收藏/总数， 购物车/总数， 购买/总数
+# 用户购买率：购买的item/操作过的item
+# 返回 14 个特征
 def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs):
     begin_date = end_date - datetime.timedelta(pre_days)
     logging.info("entered feature_how_many_behavior_user(%s, %s)" % (begin_date, end_date))
 
-    feature_cnt = 9
+    feature_cnt = 14
 
     how_many_behavior_list = np.zeros((len(user_item_pairs), feature_cnt))
     how_many_behavior_dict = dict()
@@ -26,24 +28,37 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs):
             how_many_behavior_list[index] = how_many_behavior_dict[user_id]
             continue
 
-        #前4 个为浏览，收藏，购物车, 购买的数量， 后5个为比例
+        #前4 个为浏览，收藏，购物车, 购买的数量， 后10个为比例
         behavior_cnt = [0 for x in range(feature_cnt)]
 
-        if (user_id in g_user_buy_transection):
+        items_user_bought = set()
+        if (user_id in g_user_buy_transection):            
             for item_id, item_buy_records in g_user_buy_transection[user_id].items():
                 for each_record in item_buy_records:
-                    for each_behavior in each_record:
+                    if (each_record[-1][1].date() >= begin_date and
+                        each_record[-1][1].date() < end_date):
+                        items_user_bought.add(item_id)
+
+                    for each_behavior in each_record:                        
                         if (each_behavior[1].date() >= begin_date and \
                             each_behavior[1].date() < end_date):
                             behavior_cnt[each_behavior[0] - 1] += each_behavior[2]
-
+                        
+        items_user_opted = set()
         if (user_id in g_user_behavior_patten):
             for item_id, item_opt_records in g_user_behavior_patten[user_id].items():
                 for each_record in item_opt_records:
+                    if ((each_record[0][1].date() >= begin_date and each_record[0][1].date() < end_date) or 
+                        (each_record[-1][1].date() >= begin_date and each_record[-1][1].date() < end_date)):
+                        items_user_opted.add(item_id)
+
                     for each_behavior in each_record:
                         if (each_behavior[1].date() >= begin_date and \
                             each_behavior[1].date() < end_date):
                             behavior_cnt[each_behavior[0] - 1] += each_behavior[2]
+
+        
+        total_behavior_cnt = sum(behavior_cnt[0:4])
 
         # 购买/浏览， 购买/收藏， 购买/购物车
         for behavior_index in range(3):
@@ -56,7 +71,17 @@ def feature_how_many_behavior_user(pre_days, end_date, user_item_pairs):
 
         # 购物车/收藏
         if (behavior_cnt[1] > 0):
-            behavior_cnt[7] = behavior_cnt[2] / behavior_cnt[1]
+            behavior_cnt[8] = behavior_cnt[2] / behavior_cnt[1]
+
+        if (total_behavior_cnt > 0):
+            for behavior_index in range(4):
+                behavior_cnt[behavior_index + 9] = behavior_cnt[behavior_index] / total_behavior_cnt
+        
+        # 用户购买率：购买的item/操作过的item
+        items_user_opted.union(items_user_bought)
+        if (len(items_user_opted) > 0):
+            behavior_cnt[13] = round(len(items_user_bought) / len(items_user_opted), 4)
+            logging.info("user %s  buy ratio %.4f" % (user_id, behavior_cnt[13]))
 
         how_many_behavior_list[index] = behavior_cnt
         how_many_behavior_dict[user_id] = behavior_cnt
@@ -320,6 +345,45 @@ def feature_how_many_buy_in_days(window_start_date, window_end_date, user_item_p
 
     return buy_in_days_list
 
+######################################################################################################
+######################################################################################################
+######################################################################################################
+
+def get_user_fav_cart_cnt(user_fav_cart_dict, featrue_cnt, window_start_date, window_end_date, user_records):
+    for user_id, user_opt_records in user_records.items():
+        if (user_id not in user_fav_cart_dict):
+            # 0- 23 为用户在各个小时上 fav 的数量， 24-27 为 cart 的数量
+            user_fav_cart_dict[user_id] = [0 for x in range(featrue_cnt)]
+
+        for item_id, user_opt_item_records in user_opt_records.items():
+            for each_record in user_opt_item_records:
+                for each_behavior in each_record:
+                    if (each_behavior[1].date() >= window_start_date and 
+                        each_behavior[1].date() < window_end_date):
+                        if (each_behavior[0] == BEHAVIOR_TYPE_FAV):
+                            user_fav_cart_dict[user_id][each_behavior[1].hour] += 1
+                        elif (each_behavior[0] == BEHAVIOR_TYPE_CART):
+                            user_fav_cart_dict[user_id][24 + each_behavior[1].hour] += 1
+
+# [window_start_date, window_end_date) 范围内，用户 在24 个小时上的收藏和加购物车数
+# 返回48 个特征
+def feature_user_fav_cart_in_24H(window_start_date, window_end_date, user_item_pairs):
+    logging.info("feature_user_fav_cart_in_24H(%s, %s)" % (window_start_date, window_end_date))
+    featrue_cnt = 48
+    user_fav_cart_dict = dict()
+    user_fav_cart_list = np.zeros((len(user_item_pairs), featrue_cnt))
+
+    get_user_fav_cart_cnt(user_fav_cart_dict, featrue_cnt, window_start_date, window_end_date, g_user_buy_transection)
+    get_user_fav_cart_cnt(user_fav_cart_dict, featrue_cnt, window_start_date, window_end_date, g_user_behavior_patten)
+    
+    for index in range(len(user_item_pairs)):
+        user_id = user_item_pairs[index][0]
+
+        user_fav_cart_list[index] = user_fav_cart_dict[user_id]
+
+        # logging.info("feature_user_fav_cart_in_24H user %s: %s" % (user_id, user_fav_cart_list[index]))
+
+    return user_fav_cart_list
 ######################################################################################################
 ######################################################################################################
 ######################################################################################################

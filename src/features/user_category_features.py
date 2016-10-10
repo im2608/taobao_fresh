@@ -237,7 +237,7 @@ def feature_buy_view_ratio(window_start_date, window_end_date, user_item_pairs):
 ######################################################################################################
 ######################################################################################################
 
-def get_behavior_cnt_of_days_caregory(user_records, pre_days, end_date, behavior_cnt, category, user_id):
+def get_behavior_cnt_of_days_category(user_records, pre_days, end_date, behavior_cnt, category, user_id):
     begin_date = end_date - datetime.timedelta(pre_days)
 
     if (user_id not in user_records):
@@ -255,7 +255,7 @@ def get_behavior_cnt_of_days_caregory(user_records, pre_days, end_date, behavior
                     behavior_cnt[behavior_consecutive[0] - 1] += behavior_consecutive[2]
 
     return behavior_cnt
-# user 在 category 上各个行为的次数以及在item上各个行为的次数占category上次数的比例
+# user 在 category 上各个行为的次数以及用户在item上各个行为的次数占用户在category上次数的比例
 # 返回 8 个特征
 def feature_user_behavior_cnt_on_category(pre_days, window_end_date, user_item_pairs, beahvior_cnt_on_item):
     logging.info("feature_user_behavior_cnt_on_category (%d, %s)" % (pre_days, window_end_date))
@@ -273,17 +273,16 @@ def feature_user_behavior_cnt_on_category(pre_days, window_end_date, user_item_p
         if ((user_id, item_category) in behavior_cnt_dict):
             behavior_cnt = behavior_cnt_dict[(user_id, item_category)].copy()
         else:
-            get_behavior_cnt_of_days_caregory(g_user_buy_transection, pre_days, window_end_date, behavior_cnt, item_category, user_id)
-            get_behavior_cnt_of_days_caregory(g_user_behavior_patten, pre_days, window_end_date, behavior_cnt, item_category, user_id)
+            get_behavior_cnt_of_days_category(g_user_buy_transection, pre_days, window_end_date, behavior_cnt, item_category, user_id)
+            get_behavior_cnt_of_days_category(g_user_behavior_patten, pre_days, window_end_date, behavior_cnt, item_category, user_id)
             behavior_cnt_dict[(user_id, item_category)] = behavior_cnt
             behavior_cnt = behavior_cnt_dict[(user_id, item_category)].copy()
 
-        if (beahvior_cnt_on_item is not None):
-            behavior_cnt_ratio = [0, 0, 0, 0]
-            for i in range(4):
-                if (behavior_cnt[i] > 0):
-                    behavior_cnt_ratio[i] = beahvior_cnt_on_item[index, i] / behavior_cnt[i]
-            behavior_cnt.extend(behavior_cnt_ratio)
+        behavior_cnt_ratio = [0, 0, 0, 0]
+        for i in range(4):
+            if (behavior_cnt[i] > 0):
+                behavior_cnt_ratio[i] = beahvior_cnt_on_item[index, i] / behavior_cnt[i]
+        behavior_cnt.extend(behavior_cnt_ratio)
 
         behavior_cnt_list[index] = behavior_cnt
 
