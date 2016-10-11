@@ -5,6 +5,8 @@ from taking_sample import *
 from sklearn import preprocessing
 import logging
 from utils import *
+from sklearn.cross_validation import StratifiedKFold  
+from sklearn.linear_model import LogisticRegression
 
 buy_records_mysql = dict()
 buy_records_python = dict()
@@ -106,7 +108,7 @@ def calcuatingF1(forecast_date, predicted_user_item, actual_user_item):
 
     return p, r, f1
 
-def verifyPredictionEnsembleModel(forecast_date, findal_predicted_prob, verify_samples, topK, min_proba):
+def verifyPredictionEnsembleModel(forecast_date, findal_predicted_prob, verify_samples, topK, min_proba, actual_user_item):
     # 按照 probability 降序排序
     prob_desc = np.argsort(-findal_predicted_prob[:, 1])
 
@@ -122,8 +124,6 @@ def verifyPredictionEnsembleModel(forecast_date, findal_predicted_prob, verify_s
             break
         user_item = verify_samples[prob_desc[index]]
         predicted_user_item.append((user_item, findal_predicted_prob[prob_desc[index], 1]))
-
-    actual_user_item = takingPositiveSamplesOnDate(forecast_date, during_verifying=True)
 
     return calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
 
@@ -151,5 +151,40 @@ def verifyPredictionEnsembleModelWithRule(forecast_date, findal_predicted_prob, 
     actual_user_item = takingPositiveSamplesOnDate(forecast_date, during_verifying=True)
 
     return calcuatingF1(forecast_date, predicted_user_item, actual_user_item)
+
+
+def getModelByCV(Xmat, Ymat, X_forecast_features, verify_samples, min_proba, topK, folds, verify_date):
+    print("%s getModelByCV, verify date %s" % (getCurrentTime(), verify_date))
+
+    logisticReg = LogisticRegression()
+    actual_user_item = takingPositiveSamplesOnDate(verify_date, during_verifying=True)
+
+    skf = list(StratifiedKFold(Ymat[:, 0], folds))
+
+    best_f1 = 0.0
+    best_model = logisticReg
+
+    for i, (train, test) in enumerate(skf): 
+        print("%s        verifying fold %d ..." % (getCurrentTime(), i))
+        logisticReg.fit(Xmat[train], Ymat[train, 0])
+
+        findal_predicted_prob = logisticReg.predict_proba(X_forecast_features)
+
+        params = {'forecast_date': verify_date, 
+                  'findal_predicted_prob' : findal_predicted_prob,
+                  'verify_samples' : verify_samples,
+                  'topK' : topK, 
+                  'min_proba' : min_proba, 
+                  'actual_user_item' : actual_user_item,
+                 }
+
+        # verify.verifyPredictionEnsembleModelWithRule(**params)
+        p, r, f1 = verify.verifyPredictionEnsembleModel(**params)
+        if (best_f1 < f1):
+            best_f1 = f1
+            best_model = logisticReg
+
+    print("        %s getModelByCV, best f1 is %.4f" % (getCurrentTime(), best_f1))
+    return best_model
 
 # r = f*p/(2*p-f)

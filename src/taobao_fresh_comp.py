@@ -13,7 +13,6 @@ from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.ensemble import (GradientBoostingRegressor, RandomForestClassifier, GradientBoostingClassifier)
 from feature_selection import *
-from sklearn.cross_validation import StratifiedKFold  
 from sklearn import linear_model
 
 def splitHistoryData(fileName, splited_files):
@@ -362,109 +361,26 @@ print("        %s matrix for generating weights matrix (%s, %s) (%d, %d)" % (get
 
 window_start_date = forecast_date - datetime.timedelta(slide_windows_days)
 
-if (does_output != 1):  # 如果是需要验证, 则将用于训练的用户清空，读取新的一批用户数据
+if (forecast_date != ONLINE_FORECAST_DATE):  
+    # 如果是需要验证, 则将用于训练的用户清空，读取新的一批用户数据
     verify_user_start = start_from + user_cnt
     print("%s reloading verifying users..." % (getCurrentTime()))
     verify_users = user_cnt * 2
     logging.info("reloading verifying users %d ..." % (verify_users))
     loadRecordsFromRedis(verify_user_start, verify_users)
 
-
-print("%s taking samples for forecasting %s " % (getCurrentTime(), forecast_date))
-during_forecasting = False
-if (forecast_date == ONLINE_FORECAST_DATE):
-    during_forecasting = True
-
-params = {'window_start_date' : window_start_date,
-          'window_end_date' : forecast_date,
-          'user_records' : g_user_behavior_patten,
-          'during_forecasting' : during_forecasting
-}
-samples_pattern = takeSamplesByUserBehavior(**params)
-# samples_pattern = set()
-
-if (forecast_date != ONLINE_FORECAST_DATE):
-    params = {'window_start_date' : window_start_date,
-              'window_end_date' : forecast_date,
-              'user_records' : g_user_buy_transection,
-              'during_forecasting' : during_forecasting
-    }
-    samples_buy = takeSamplesByUserBehavior(**params)
-    print("%s samples count from buy %d / %d pattern" % (getCurrentTime(), len(samples_buy), len(samples_pattern)))
-
-    samples_forecast = samples_pattern.union(samples_buy)    
-    samples_forecast = list(samples_forecast)
-else:
-    samples_forecast = list(samples_pattern)    
-
-print("%s samples forecast %d" % (getCurrentTime(), len(samples_forecast)))
-
-params = {'window_start_date' : window_start_date, 
-         'window_end_date' : forecast_date,
-         'nag_per_pos' : nag_per_pos, 
-         'samples' : samples_forecast, 
-         }
-
-Xmat_forecast = createFeatureMatrix(**params)
-
-m, n = np.shape(Xmat_forecast)
-print("        %s matrix for generating forecast matrix (%s, %s), (%d, %d)" % (getCurrentTime(), window_start_date, forecast_date, m, n))
+# 生成预测用的特征矩阵
+Xmat_forecast, samples_forecast = createForecastFeatureMat(forecast_date, slide_windows_days, nag_per_pos, slide_windows_models)
 
 onehot_enc = getOnehotEncoder(slide_windows_models, Xmat_weight, Xmat_forecast, n_estimators)
 
-# 滑动窗口训练出的model分别对12-08 -- 12-17的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
-X_train_features = Xmat_weight
-
-for i, X_useful_mat_clf_model in enumerate(slide_windows_models):
-    X_useful_mat = X_useful_mat_clf_model[0]
-    clf_model = X_useful_mat_clf_model[1]
-    slide_windows_start = X_useful_mat_clf_model[2][0]
-    slide_windows_end = X_useful_mat_clf_model[2][1]
-  
-    #  GBDT 得到叶节点
-    X_train_lr_enc = clf_model.apply(Xmat_weight)[:, :, 0]
-    # X_train_lr_enc = onehot_enc.transform(X_train_lr_enc).toarray()
-    if (X_train_features is None):
-        X_train_features = X_train_lr_enc
-    else:
-        X_train_features = np.column_stack((X_train_features, X_train_lr_enc))
+# 滑动窗口训练出的model分别对特征矩阵的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
+X_train_features = combineLeafNodeFeatureMat(Xmat_weight, onehot_enc, slide_windows_models)
+X_forecast_features = combineLeafNodeFeatureMat(Xmat_forecast, onehot_enc, slide_windows_models)
 
 m, n = X_train_features.shape
 print("        %s X_train_features by slide window models %d, %d " % (getCurrentTime(), m, n))
 
-# EnsembleModel
-# 逻辑回归算法
-print("        %s running LR..." % (getCurrentTime()))
-logisticReg = LogisticRegression()
-logisticReg.fit(X_train_features, Ymat_weight)
-
-# clf = linear_model.Lasso(alpha=0.1)
-# clf.fit(X_train_features, Ymat_weight)
-
-# logisticReg = modelBlending_iterate(logisticReg, X_train_features, min_proba)
-
-# 滑动窗口训练出的model分别对特征矩阵的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
-X_forecast_features = Xmat_forecast
-
-for X_useful_mat_clf_model in slide_windows_models:
-    X_useful_mat = X_useful_mat_clf_model[0]
-    clf_model = X_useful_mat_clf_model[1]
-    slide_windows_start = X_useful_mat_clf_model[2][0]
-    slide_windows_end = X_useful_mat_clf_model[2][1]
-
-    X_forecast_enc =clf_model.apply(Xmat_forecast)[:, :, 0]    
-    # X_forecast_enc = onehot_enc.transform(X_forecast_enc).toarray()
-    if (X_forecast_features is None):
-        X_forecast_features = X_forecast_enc
-    else:
-        X_forecast_features = np.column_stack((X_forecast_features, X_forecast_enc))
-    # blend_forecast[:, i] = clf_model.predict_proba(Xmat_forecast)[:, 1]
-
-m, n =  X_forecast_features.shape
-print("        %s forecasting feature matrix %d, %d, samples for forecasting %d " % (getCurrentTime(), m, n, len(samples_forecast)))
-
-# 用逻辑回归预测
-findal_predicted_prob = logisticReg.predict_proba(X_forecast_features)
 
 # findal_predicted_prob = clf.predict(X_forecast_features)
 # Y_prob = np.zeros((X_forecast_features.shape[0], 2))
@@ -477,6 +393,18 @@ if (does_output == 1):
     print(" forecasting %s  user from %d, count %d, slide window size %d" % 
          (forecast_date, start_from, user_cnt, slide_windows_days))
     print("=====================================================================")
+
+    # 把 12-18 号的数据按照 forecast feature matrix 的格式再生成一次来做交叉验证
+    Xmat_cv, samples_cv = createForecastFeatureMat(final_end_date, slide_windows_days, nag_per_pos, slide_windows_models)
+    Xmat_cv = combineLeafNodeFeatureMat(Xmat_cv, onehot_enc, slide_windows_models)
+    
+    n_folds = 10
+    Ymat = np.zeros((len(Ymat_weight), 1))
+    Ymat[:, 0] = Ymat_weight
+
+    logisticReg = verify.getModelByCV(X_train_features, Ymat, Xmat_cv, samples_cv, min_proba, topK, n_folds, window_end_date)
+
+    findal_predicted_prob = logisticReg.predict_proba(X_forecast_features)
 
     # 按照 probability 降序排序
     prob_desc = np.argsort(-findal_predicted_prob[:, 1])
@@ -501,9 +429,6 @@ if (does_output == 1):
     outputFile.close()
 
 else:
-    verify_user_start = start_from + user_cnt
-    verify_user_cnt = user_cnt
-
     print("=====================================================================")
     print("== verifyPredictionEnsembleModel (%s, %s) esitmators %d, max depth %d, learning rate %.2f, min split %d" %
           (window_start_date, forecast_date, n_estimators, max_depth, learning_rate, min_samples_split))
@@ -512,12 +437,9 @@ else:
     if (len(samples_forecast) < topK):
         topK = round(len(samples_forecast) / 2)
 
-    params = {'forecast_date': forecast_date, 
-              'findal_predicted_prob' : findal_predicted_prob,
-              'verify_samples' : samples_forecast,
-              'topK' : topK, 
-              'min_proba' : min_proba, 
-             }
+    n_folds = 10
 
-    # verify.verifyPredictionEnsembleModelWithRule(**params)
-    verify.verifyPredictionEnsembleModel(**params)
+    Ymat = np.zeros((len(Ymat_weight), 1))
+    Ymat[:, 0] = Ymat_weight
+
+    verify.getModelByCV(X_train_features, Ymat, X_forecast_features, samples_forecast, min_proba, topK, n_folds, forecast_date)

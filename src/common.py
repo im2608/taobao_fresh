@@ -945,3 +945,24 @@ def ridgeRegress(Xmat, Ymat, lam):
     tmp = Xmat.T * np.mat(Ymat).T
     ws = demon.I * tmp
     return ws
+
+
+# 滑动窗口训练出的model分别对12-08 -- 12-18的数据生成叶节点， 与feature weight 矩阵合并后，生成一个大的特征矩阵，然后交给LR进行训练
+def combineLeafNodeFeatureMat(Xmat, onehot_enc, slide_windows_models):
+    X_leafnode_mat = Xmat
+
+    for X_useful_mat_clf_model in slide_windows_models:
+        X_useful_mat = X_useful_mat_clf_model[0]
+        clf_model = X_useful_mat_clf_model[1]
+        slide_windows_start = X_useful_mat_clf_model[2][0]
+        slide_windows_end = X_useful_mat_clf_model[2][1]
+
+        X_mat_enc = clf_model.apply(Xmat)[:, :, 0]    
+        # X_mat_enc = onehot_enc.transform(X_mat_enc).toarray()
+        if (X_leafnode_mat is None):
+            X_leafnode_mat = X_mat_enc
+        else:
+            X_leafnode_mat = np.column_stack((X_leafnode_mat, X_mat_enc))
+        # blend_forecast[:, i] = clf_model.predict_proba(Xmat_forecast)[:, 1]
+
+    return X_leafnode_mat
